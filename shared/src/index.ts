@@ -25,6 +25,8 @@ export {
 export type { ElfAddressResult, ElfAddressSpace } from "./elf/address.ts";
 
 export { parsePe } from "./pe/parse.ts";
+export { parseMachO } from "./macho/parse.ts";
+export type { MachOParseResult, MachOSegment } from "./macho/types.ts";
 export type { PeParseResult } from "./pe/types.ts";
 export {
   buildPeAddressSpace,

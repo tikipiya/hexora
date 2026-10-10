@@ -12,6 +12,8 @@ import type {
 } from "./types.ts";
 import { DATA_DIR_NAMES } from "./types.ts";
 import { peRvaToFile, buildPeAddressSpace } from "./address.ts";
+import { parsePeRelocBlocks } from "./relocs.ts";
+import { parsePeResources } from "./resources.ts";
 
 const MACHINE: Record<number, string> = {
   0x014c: "x86",
@@ -196,6 +198,8 @@ export function parsePe(
 
   const imports = parseImports(r, space, dataDirectories[1], isPe32Plus, push);
   const exports = parseExports(r, space, dataDirectories[0], push);
+  const resources = parsePeResources(r, space, dataDirectories[2]);
+  const relocBlocks = parsePeRelocBlocks(r, space, dataDirectories[5]);
 
   return {
     ok: !issues.some((i) => i.severity === "error"),
@@ -214,6 +218,8 @@ export function parsePe(
     dataDirectories,
     imports,
     exports,
+    resources,
+    relocBlocks,
     issues,
   };
 }

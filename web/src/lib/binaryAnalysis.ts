@@ -4,7 +4,9 @@ import {
   detectBinaryKind,
   parseElf,
   parsePe,
+  parseMachO,
   type ElfParseResult,
+  type MachOParseResult,
   type ParseIssue,
   type PeParseResult,
   type ElfAddressSpace,
@@ -14,9 +16,10 @@ import {
 export type ParseMode = "strict" | "lenient";
 
 export interface BinaryAnalysis {
-  kind: "elf" | "pe" | "unknown";
+  kind: "elf" | "pe" | "macho" | "unknown";
   elf: ElfParseResult | null;
   pe: PeParseResult | null;
+  macho: MachOParseResult | null;
   elfSpace: ElfAddressSpace | null;
   peSpace: PeAddressSpace | null;
   issues: ParseIssue[];
@@ -34,6 +37,7 @@ export function analyzeBinary(
         kind: "elf",
         elf,
         pe: null,
+        macho: null,
         elfSpace: buildElfAddressSpace(
           elf.programHeaders,
           elf.sectionHeaders,
@@ -47,6 +51,7 @@ export function analyzeBinary(
         kind: "unknown",
         elf: null,
         pe: null,
+        macho: null,
         elfSpace: null,
         peSpace: null,
         issues: [
@@ -66,6 +71,7 @@ export function analyzeBinary(
         kind: "pe",
         elf: null,
         pe,
+        macho: null,
         elfSpace: null,
         peSpace: buildPeAddressSpace(
           pe.imageBase,
@@ -80,6 +86,7 @@ export function analyzeBinary(
         kind: "unknown",
         elf: null,
         pe: null,
+        macho: null,
         elfSpace: null,
         peSpace: null,
         issues: [
@@ -92,10 +99,41 @@ export function analyzeBinary(
       };
     }
   }
+  if (kind === "macho") {
+    try {
+      const macho = parseMachO(buffer, mode);
+      return {
+        kind: "macho",
+        elf: null,
+        pe: null,
+        macho,
+        elfSpace: null,
+        peSpace: null,
+        issues: macho.issues,
+      };
+    } catch (e) {
+      return {
+        kind: "unknown",
+        elf: null,
+        pe: null,
+        macho: null,
+        elfSpace: null,
+        peSpace: null,
+        issues: [
+          {
+            severity: "error",
+            code: "macho_fatal",
+            message: e instanceof Error ? e.message : "Mach-O parse failed",
+          },
+        ],
+      };
+    }
+  }
   return {
     kind: "unknown",
     elf: null,
     pe: null,
+    macho: null,
     elfSpace: null,
     peSpace: null,
     issues: [],

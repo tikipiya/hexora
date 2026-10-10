@@ -48,6 +48,24 @@ export interface PeExportEntry {
   rva: number;
 }
 
+export interface PeResourceEntry {
+  typeId: number;
+  typeName: string;
+  nameId: number;
+  langId: number;
+  dataRva: number;
+  size: number;
+  fileOffset: number | null;
+  codepage: number;
+}
+
+export interface PeRelocBlock {
+  pageRva: number;
+  blockSize: number;
+  entryCount: number;
+  fileOffset: number;
+}
+
 export interface PeParseResult {
   ok: boolean;
   dos: DosHeader;
@@ -65,6 +83,8 @@ export interface PeParseResult {
   dataDirectories: DataDirectoryEntry[];
   imports: PeImportEntry[];
   exports: PeExportEntry[];
+  resources: PeResourceEntry[];
+  relocBlocks: PeRelocBlock[];
   issues: ParseIssue[];
 }
 

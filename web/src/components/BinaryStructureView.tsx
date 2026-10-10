@@ -54,17 +54,59 @@ export function BinaryStructureView({ analysis, onSelectOffset, onDisasmAt }: Pr
           }}
         />
         {pe.imports.length > 0 && (
-          <div>
-            <h4 className="text-moon-mist text-body-sm font-medium mb-2">Imports</h4>
+          <div className="space-y-2">
+            <h4 className="text-moon-mist text-body-sm font-medium">Imports</h4>
             <ul className="text-caption font-dotdigital space-y-2">
               {pe.imports.map((imp) => (
                 <li key={imp.dll}>
-                  <span className="text-frost-glow">{imp.dll}</span>
-                  <span className="text-fog-veil ml-2">({imp.functions.length} thunks)</span>
+                  <details>
+                    <summary className="text-frost-glow cursor-pointer">
+                      {imp.dll}
+                      <span className="text-fog-veil ml-2">({imp.functions.length})</span>
+                    </summary>
+                    <ul className="pl-4 mt-1 text-moon-mist max-h-40 overflow-auto">
+                      {imp.functions.slice(0, 80).map((fn, i) => (
+                        <li key={`${fn.iatRva}-${i}`}>
+                          {fn.name ?? `#${fn.ordinal}`}
+                          <span className="text-fog-veil"> · IAT 0x{fn.iatRva.toString(16)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
                 </li>
               ))}
             </ul>
           </div>
+        )}
+        {pe.resources.length > 0 && (
+          <SectionTable
+            title={`Resources (${pe.resources.length})`}
+            columns={["Type", "Name", "Lang", "Size", "File"]}
+            rows={pe.resources.slice(0, 150).map((res) => [
+              res.typeName,
+              String(res.nameId),
+              String(res.langId),
+              String(res.size),
+              res.fileOffset !== null ? `0x${res.fileOffset.toString(16)}` : "—",
+            ])}
+            onCellClick={(row) => {
+              const res = pe.resources[row];
+              if (res?.fileOffset != null) onSelectOffset(res.fileOffset);
+            }}
+          />
+        )}
+        {pe.relocBlocks.length > 0 && (
+          <SectionTable
+            title={`Base reloc blocks (${pe.relocBlocks.length})`}
+            columns={["Page RVA", "Block size", "Entries", "File"]}
+            rows={pe.relocBlocks.slice(0, 100).map((b) => [
+              `0x${b.pageRva.toString(16)}`,
+              String(b.blockSize),
+              String(b.entryCount),
+              `0x${b.fileOffset.toString(16)}`,
+            ])}
+            onCellClick={(row) => onSelectOffset(pe.relocBlocks[row]!.fileOffset)}
+          />
         )}
         {pe.exports.length > 0 && (
           <SectionTable
@@ -131,6 +173,28 @@ export function BinaryStructureView({ analysis, onSelectOffset, onDisasmAt }: Pr
             if (!s.isNobits) onDisasmAt?.(Number(s.offset));
           }}
         />
+        {elf.dynamic.length > 0 && (
+          <SectionTable
+            title={`Dynamic (${elf.dynamic.length})`}
+            columns={["Tag", "Value"]}
+            rows={elf.dynamic.slice(0, 120).map((d) => [
+              d.tagName,
+              `0x${d.value.toString(16)}`,
+            ])}
+          />
+        )}
+        {elf.relocations.length > 0 && (
+          <SectionTable
+            title={`Relocations (${elf.relocations.length})`}
+            columns={["Offset", "Sym", "Type", "Rela"]}
+            rows={elf.relocations.slice(0, 200).map((rel) => [
+              `0x${rel.offset.toString(16)}`,
+              String(rel.sym),
+              String(rel.type),
+              rel.rela ? "yes" : "no",
+            ])}
+          />
+        )}
         {elf.symbols.length > 0 && (
           <SectionTable
             title={`Symbols (${elf.symbols.length})`}
@@ -145,6 +209,48 @@ export function BinaryStructureView({ analysis, onSelectOffset, onDisasmAt }: Pr
             ])}
           />
         )}
+      </div>
+    );
+  }
+
+  if (analysis.kind === "macho" && analysis.macho) {
+    const m = analysis.macho;
+    return (
+      <div className="glass-card hairline-inset p-4 space-y-4 max-h-[70vh] overflow-auto">
+        <h3 className="font-aeonikpro text-heading-sm text-ice-highlight">Mach-O Structure</h3>
+        <HeaderGrid
+          rows={[
+            ["CPU", m.cpuName],
+            ["File type", m.fileTypeName],
+            ["Bits", String(m.bits)],
+            ["Magic", m.magic],
+            ["Load commands", String(m.loadCommands.length)],
+          ]}
+        />
+        <SectionTable
+          title="Segments"
+          columns={["Name", "VMA", "VMSize", "FileOff", "FileSize", "Prot"]}
+          rows={m.segments.map((s) => [
+            s.name,
+            `0x${s.vmaddr.toString(16)}`,
+            String(s.vmsize),
+            `0x${s.fileoff.toString(16)}`,
+            String(s.filesize),
+            s.initprot,
+          ])}
+          onCellClick={(row) => onSelectOffset(Number(m.segments[row]!.fileoff))}
+          onDisasmRow={(row) => onDisasmAt?.(Number(m.segments[row]!.fileoff))}
+        />
+        <SectionTable
+          title="Load commands"
+          columns={["Cmd", "Size", "Offset"]}
+          rows={m.loadCommands.slice(0, 80).map((c) => [
+            c.cmdName,
+            String(c.cmdsize),
+            `0x${c.fileOffset.toString(16)}`,
+          ])}
+          onCellClick={(row) => onSelectOffset(m.loadCommands[row]!.fileOffset)}
+        />
       </div>
     );
   }
