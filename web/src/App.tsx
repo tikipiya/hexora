@@ -106,6 +106,7 @@ export function App() {
     if (!analysis) return "Raw";
     if (analysis.kind === "pe") return analysis.pe?.isPe32Plus ? "PE32+" : "PE32";
     if (analysis.kind === "elf") return `ELF${analysis.elf?.header.class ?? ""}`;
+    if (analysis.kind === "macho") return `Mach-O ${analysis.macho?.cpuName ?? ""}`;
     return "Unknown";
   }, [analysis]);
 
