@@ -1,3 +1,6 @@
+import { MD5, SHA1 } from "@noble/hashes/legacy";
+import { SHA256, SHA384, SHA512 } from "@noble/hashes/sha2";
+
 export type HashAlgorithm =
   | "md5"
   | "sha1"
@@ -14,6 +17,7 @@ export interface HashResult {
 export interface FileHashes {
   results: HashResult[];
   elapsedMs: number;
+  incremental: boolean;
 }
 
 const ORDER: HashAlgorithm[] = [
@@ -25,48 +29,7 @@ const ORDER: HashAlgorithm[] = [
   "sha512",
 ];
 
-export async function hashFile(
-  data: ArrayBuffer,
-  onProgress?: (label: string, percent: number) => void,
-): Promise<FileHashes> {
-  const start = performance.now();
-  onProgress?.("ハッシュ計算", 0);
-  const view = new Uint8Array(data);
-  const results: HashResult[] = [];
-
-  results.push({ algorithm: "crc32", hex: crc32Hex(view).padStart(8, "0") });
-  onProgress?.("CRC32", 12);
-  results.push({ algorithm: "md5", hex: md5Hex(view) });
-  onProgress?.("MD5", 24);
-
-  const subtle: { id: HashAlgorithm; name: string }[] = [
-    { id: "sha1", name: "SHA-1" },
-    { id: "sha256", name: "SHA-256" },
-    { id: "sha384", name: "SHA-384" },
-    { id: "sha512", name: "SHA-512" },
-  ];
-  let p = 24;
-  const step = 76 / subtle.length;
-  for (const { id, name } of subtle) {
-    const digest = await crypto.subtle.digest(name, data);
-    results.push({ algorithm: id, hex: bufToHex(digest) });
-    p += step;
-    onProgress?.(name, Math.round(p));
-  }
-
-  results.sort((a, b) => ORDER.indexOf(a.algorithm) - ORDER.indexOf(b.algorithm));
-  return { results, elapsedMs: Math.round(performance.now() - start) };
-}
-
-export function getHash(
-  hashes: FileHashes | null,
-  algorithm: HashAlgorithm,
-): string | null {
-  return hashes?.results.find((r) => r.algorithm === algorithm)?.hex ?? null;
-}
-
-function bufToHex(buf: ArrayBuffer): string {
-  const bytes = new Uint8Array(buf);
+function bytesToHex(bytes: Uint8Array): string {
   let out = "";
   for (let i = 0; i < bytes.length; i++) {
     out += bytes[i].toString(16).padStart(2, "0");
@@ -74,87 +37,82 @@ function bufToHex(buf: ArrayBuffer): string {
   return out;
 }
 
-function crc32Hex(data: Uint8Array): string {
-  let crc = 0xffffffff;
+/** 読み込みストリームと同時に更新するマルチハッシュ */
+export class IncrementalHashSuite {
+  private crcState = 0xffffffff;
+  private readonly md5 = new MD5();
+  private readonly sha1 = new SHA1();
+  private readonly sha256 = new SHA256();
+  private readonly sha384 = new SHA384();
+  private readonly sha512 = new SHA512();
+  private readonly started = performance.now();
+  private bytesProcessed = 0;
+
+  update(chunk: Uint8Array): void {
+    if (chunk.length === 0) return;
+    this.bytesProcessed += chunk.length;
+    this.crcState = crc32Update(this.crcState, chunk);
+    this.md5.update(chunk);
+    this.sha1.update(chunk);
+    this.sha256.update(chunk);
+    this.sha384.update(chunk);
+    this.sha512.update(chunk);
+  }
+
+  getBytesProcessed(): number {
+    return this.bytesProcessed;
+  }
+
+  finalize(): FileHashes {
+    const results: HashResult[] = [
+      {
+        algorithm: "crc32",
+        hex: ((this.crcState ^ 0xffffffff) >>> 0).toString(16).padStart(8, "0"),
+      },
+      { algorithm: "md5", hex: bytesToHex(this.md5.digest()) },
+      { algorithm: "sha1", hex: bytesToHex(this.sha1.digest()) },
+      { algorithm: "sha256", hex: bytesToHex(this.sha256.digest()) },
+      { algorithm: "sha384", hex: bytesToHex(this.sha384.digest()) },
+      { algorithm: "sha512", hex: bytesToHex(this.sha512.digest()) },
+    ];
+    results.sort((a, b) => ORDER.indexOf(a.algorithm) - ORDER.indexOf(b.algorithm));
+    return {
+      results,
+      elapsedMs: Math.round(performance.now() - this.started),
+      incremental: true,
+    };
+  }
+}
+
+function crc32Update(crc: number, data: Uint8Array): number {
+  let c = crc;
   for (let i = 0; i < data.length; i++) {
-    crc ^= data[i];
+    c ^= data[i];
     for (let j = 0; j < 8; j++) {
-      crc = crc & 1 ? (crc >>> 1) ^ 0xedb88320 : crc >>> 1;
+      c = c & 1 ? (c >>> 1) ^ 0xedb88320 : c >>> 1;
     }
   }
-  return ((crc ^ 0xffffffff) >>> 0).toString(16);
+  return c >>> 0;
 }
 
-function md5Hex(data: Uint8Array): string {
-  const words = md5Words(data);
-  return words.map((w) => (w >>> 0).toString(16).padStart(8, "0")).join("");
+export function createIncrementalHasher(): IncrementalHashSuite {
+  return new IncrementalHashSuite();
 }
 
-function md5Words(input: Uint8Array): number[] {
-  const n = input.length;
-  const paddedLen = (((n + 8) >>> 6) + 1) << 6;
-  const buf = new Uint8Array(paddedLen);
-  buf.set(input);
-  buf[n] = 0x80;
-  const view = new DataView(buf.buffer);
-  view.setUint32(paddedLen - 8, n << 3, true);
-  view.setUint32(paddedLen - 4, n >>> 29, true);
+export async function hashFile(
+  data: ArrayBuffer,
+  onProgress?: (label: string, percent: number) => void,
+): Promise<FileHashes> {
+  const h = createIncrementalHasher();
+  h.update(new Uint8Array(data));
+  onProgress?.("finalize", 100);
+  const result = h.finalize();
+  return { ...result, incremental: false };
+}
 
-  let a = 0x67452301;
-  let b = 0xefcdab89;
-  let c = 0x98badcfe;
-  let d = 0x10325476;
-
-  const K = new Array<number>(64);
-  for (let i = 0; i < 64; i++) {
-    K[i] = Math.floor(Math.abs(Math.sin(i + 1)) * 2 ** 32) >>> 0;
-  }
-  const S = [
-    7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 5, 9, 14, 20, 5, 9,
-    14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23,
-    4, 11, 16, 23, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21,
-  ];
-
-  const rotl = (x: number, n: number) => ((x << n) | (x >>> (32 - n))) >>> 0;
-
-  for (let i = 0; i < paddedLen; i += 64) {
-    const M = new Array<number>(16);
-    for (let j = 0; j < 16; j++) M[j] = view.getUint32(i + j * 4, true);
-
-    let A = a;
-    let B = b;
-    let C = c;
-    let D = d;
-
-    for (let j = 0; j < 64; j++) {
-      let F: number;
-      let g: number;
-      if (j < 16) {
-        F = (B & C) | (~B & D);
-        g = j;
-      } else if (j < 32) {
-        F = (D & B) | (~D & C);
-        g = (5 * j + 1) % 16;
-      } else if (j < 48) {
-        F = B ^ C ^ D;
-        g = (3 * j + 5) % 16;
-      } else {
-        F = C ^ (B | ~D);
-        g = (7 * j) % 16;
-      }
-      const tmp = D;
-      D = C;
-      C = B;
-      const sum = (A + F + K[j] + M[g]) >>> 0;
-      B = (B + rotl(sum, S[j])) >>> 0;
-      A = tmp;
-    }
-
-    a = (a + A) >>> 0;
-    b = (b + B) >>> 0;
-    c = (c + C) >>> 0;
-    d = (d + D) >>> 0;
-  }
-
-  return [a, b, c, d];
+export function getHash(
+  hashes: FileHashes | null,
+  algorithm: HashAlgorithm,
+): string | null {
+  return hashes?.results.find((r) => r.algorithm === algorithm)?.hex ?? null;
 }

@@ -32,6 +32,11 @@ export function HashPanel({ hashes, loading, progress }: Props) {
         {hashes && (
           <span className="text-caption text-fog-veil">
             {hashes.elapsedMs} ms
+            {hashes.incremental && (
+              <span className="ml-2 rounded-[var(--radius-badges)] bg-luminous-fill px-1.5 py-0.5">
+                インクリメンタル
+              </span>
+            )}
           </span>
         )}
       </div>

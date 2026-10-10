@@ -97,7 +97,13 @@ export function FileDropzone({ onLoaded, onError }: Props) {
       {busy && progress && (
         <div className="max-w-sm mx-auto mb-6 text-left">
           <div className="flex justify-between text-caption text-moon-mist mb-1">
-            <span>{progress.phase === "ready" ? "準備完了" : "読み込み中"}</span>
+            <span>
+              {progress.phase === "ready"
+                ? "準備完了"
+                : progress.phase === "hash"
+                  ? "ハッシュ確定中"
+                  : "読み込み + ハッシュ"}
+            </span>
             <span>{progress.percent}%</span>
           </div>
           <div className="h-2 rounded-full bg-[rgba(199,211,234,0.08)] overflow-hidden">

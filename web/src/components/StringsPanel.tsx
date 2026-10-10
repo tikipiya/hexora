@@ -5,6 +5,8 @@ interface Props {
   strings: ExtractedString[];
   scanning?: boolean;
   truncated?: boolean;
+  scanProgress?: { scanned: number; total: number } | null;
+  usedWorker?: boolean;
   minLength: number;
   onMinLengthChange: (n: number) => void;
   dedupe: boolean;
@@ -33,6 +35,8 @@ export function StringsPanel({
   strings,
   scanning,
   truncated,
+  scanProgress,
+  usedWorker,
   minLength,
   onMinLengthChange,
   dedupe,
@@ -160,11 +164,31 @@ export function StringsPanel({
       </div>
 
       <p className="text-fog-veil text-caption mb-2">
-        {scanning
-          ? "スキャン中…"
-          : `${filtered.length.toLocaleString()} / ${strings.length.toLocaleString()} 件表示`}
+        {scanning ? (
+          <>
+            スキャン中…
+            {scanProgress && (
+              <span className="ml-2">
+                {Math.round((scanProgress.scanned / scanProgress.total) * 100)}%
+                {usedWorker && " · Web Worker"}
+              </span>
+            )}
+          </>
+        ) : (
+          `${filtered.length.toLocaleString()} / ${strings.length.toLocaleString()} 件表示`
+        )}
         {truncated && " · 上限に達したため一部のみ"}
       </p>
+      {scanning && scanProgress && (
+        <div className="h-1 rounded-full bg-[rgba(199,211,234,0.08)] overflow-hidden mb-2">
+          <div
+            className="h-full bg-void-violet transition-all"
+            style={{
+              width: `${Math.round((scanProgress.scanned / scanProgress.total) * 100)}%`,
+            }}
+          />
+        </div>
+      )}
 
       <ul className="overflow-auto text-body-sm space-y-0.5 font-dotdigital flex-1">
         {filtered.map((s) => (

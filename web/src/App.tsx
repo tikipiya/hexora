@@ -14,7 +14,8 @@ import { detectBinary } from "./lib/detect";
 import { elfSectionBytes } from "./lib/elf";
 import type { LoadedFile } from "./lib/fileLoad";
 import { regionsFromElf, regionsFromPe } from "./lib/hexRegions";
-import { hashFile, type FileHashes } from "./lib/hash";
+import type { FileHashes } from "./lib/hash";
+import { memoryMapFromElf, memoryMapFromPe } from "./lib/memoryMap";
 import { DEFAULT_STRING_OPTIONS } from "./lib/strings";
 import { peSectionBytes } from "./lib/pe";
 
@@ -25,11 +26,6 @@ export function App() {
   const [data, setData] = useState<Uint8Array | null>(null);
   const [warnedLarge, setWarnedLarge] = useState(false);
   const [hashes, setHashes] = useState<FileHashes | null>(null);
-  const [hashBusy, setHashBusy] = useState(false);
-  const [hashProgress, setHashProgress] = useState<{
-    label: string;
-    percent: number;
-  } | null>(null);
   const [loadBusy, setLoadBusy] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("overview");
@@ -55,7 +51,8 @@ export function App() {
     [stringMinLen, stringDedupe],
   );
 
-  const { strings, scanning, truncated } = useExtractedStrings(data, stringOptions);
+  const { strings, scanning, truncated, scanProgress, usedWorker } =
+    useExtractedStrings(data, stringOptions);
 
   const detected = useMemo(
     () => (data ? detectBinary(data.buffer as ArrayBuffer) : null),
@@ -66,6 +63,12 @@ export function App() {
     if (detected?.pe) return regionsFromPe(detected.pe);
     if (detected?.elf) return regionsFromElf(detected.elf);
     return [];
+  }, [detected]);
+
+  const memoryMap = useMemo(() => {
+    if (detected?.pe) return memoryMapFromPe(detected.pe);
+    if (detected?.elf) return memoryMapFromElf(detected.elf);
+    return null;
   }, [detected]);
 
   const formatLabel = useMemo(() => {
@@ -81,19 +84,12 @@ export function App() {
     setFileName(loaded.file.name);
     setData(loaded.bytes);
     setWarnedLarge(loaded.warnedLarge);
+    setHashes(loaded.hashes);
     setTab("overview");
     setJumpOffset(undefined);
     setHexFocus(null);
-    setHashes(null);
-    setHashBusy(true);
-    setHashProgress({ label: "ハッシュ", percent: 0 });
 
     try {
-      const h = await hashFile(loaded.buffer, (label, percent) => {
-        setHashProgress({ label, percent });
-      });
-      setHashes(h);
-
       const d = detectBinary(loaded.buffer);
       if (d.pe) {
         const text = d.pe.sections.find((s) =>
@@ -127,8 +123,6 @@ export function App() {
         setDisasmSlice(null);
       }
     } finally {
-      setHashBusy(false);
-      setHashProgress(null);
       setLoadBusy(false);
     }
   }, []);
@@ -199,7 +193,7 @@ export function App() {
               </button>
             </div>
 
-            <HashPanel hashes={hashes} loading={hashBusy} progress={hashProgress} />
+            <HashPanel hashes={hashes} loading={!hashes && loadBusy} />
 
             <nav className="flex flex-wrap gap-2">
               {(
@@ -253,6 +247,7 @@ export function App() {
                 highlightOffset={jumpOffset}
                 focusRange={hexFocus ?? undefined}
                 regions={hexRegions}
+                memoryMap={memoryMap}
                 onJump={(o) => setJumpOffset(o)}
               />
             )}
@@ -262,6 +257,8 @@ export function App() {
                 strings={strings}
                 scanning={scanning}
                 truncated={truncated}
+                scanProgress={scanProgress}
+                usedWorker={usedWorker}
                 minLength={stringMinLen}
                 onMinLengthChange={setStringMinLen}
                 dedupe={stringDedupe}

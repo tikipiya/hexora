@@ -14,8 +14,10 @@ import {
   parseSearchInput,
   type HexSearchMatch,
 } from "../lib/hexSearch";
+import { HexInspector } from "./HexInspector";
 import type { HexRegion } from "../lib/hexRegions";
 import { regionAt } from "../lib/hexRegions";
+import type { MemoryMap } from "../lib/memoryMap";
 
 const ROW_BYTES = 16;
 const ROW_HEIGHT = 24;
@@ -26,6 +28,7 @@ interface Props {
   highlightOffset?: number;
   focusRange?: { start: number; end: number };
   regions?: HexRegion[];
+  memoryMap?: MemoryMap | null;
   onJump?: (offset: number) => void;
 }
 
@@ -34,6 +37,7 @@ export function HexViewer({
   highlightOffset,
   focusRange,
   regions = [],
+  memoryMap = null,
   onJump,
 }: Props) {
   const [search, setSearch] = useState("");
@@ -149,17 +153,27 @@ export function HexViewer({
     }
   };
 
+  const cursor =
+    selEnd ?? selStart ?? activeOffset ?? highlightOffset ?? 0;
+
   const regionLabel =
     activeOffset !== undefined && activeOffset !== null
       ? regionAt(regions, activeOffset)?.label
       : null;
 
+  const follow = (off: number) => {
+    setSelStart(off);
+    setSelEnd(off);
+    scrollToOffset(off);
+  };
+
   return (
     <div
-      className="glass-card hairline-inset p-4 flex flex-col gap-3 min-h-[360px]"
+      className="grid gap-4 lg:grid-cols-[1fr_minmax(280px,340px)]"
       onKeyDown={handleKeyDown}
       tabIndex={0}
     >
+    <div className="glass-card hairline-inset p-4 flex flex-col gap-3 min-h-[360px]">
       <div className="flex flex-wrap gap-2 items-end justify-between">
         <div>
           <h3 className="font-aeonikpro text-heading-sm text-ice-highlight">Hex</h3>
@@ -248,6 +262,15 @@ export function HexViewer({
           )}
         </div>
       </div>
+    </div>
+
+    <HexInspector
+      data={data}
+      cursor={Math.min(cursor, data.length - 1)}
+      selection={selectionRange}
+      memoryMap={memoryMap}
+      onFollow={follow}
+    />
     </div>
   );
 }

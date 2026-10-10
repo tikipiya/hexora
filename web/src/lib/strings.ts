@@ -35,9 +35,19 @@ export interface StringExtractResult {
   scannedBytes: number;
 }
 
+export const STRINGS_WORKER_THRESHOLD = 1024 * 1024;
+const PROGRESS_INTERVAL = 512 * 1024;
+
+export type StringScanProgress = {
+  scanned: number;
+  total: number;
+  strings: ExtractedString[];
+};
+
 export function extractStrings(
   data: Uint8Array,
   options: StringExtractOptions = DEFAULT_STRING_OPTIONS,
+  onProgress?: (p: StringScanProgress) => void,
 ): StringExtractResult {
   const out: ExtractedString[] = [];
   const seen = options.dedupe ? new Set<string>() : null;
@@ -59,28 +69,36 @@ export function extractStrings(
 
   const isFull = () => truncated || out.length >= options.maxResults;
 
+  const report = (scanned: number) => {
+    if (!onProgress) return;
+    if (scanned % PROGRESS_INTERVAL < 256 || scanned >= data.length) {
+      onProgress({ scanned, total: data.length, strings: [...out] });
+    }
+  };
+
   for (const enc of options.encodings) {
     if (truncated) break;
     switch (enc) {
       case "ascii":
-        scanRun(data, options.minLength, isAsciiPrintable, "ascii", push, isFull);
+        scanRun(data, options.minLength, isAsciiPrintable, "ascii", push, isFull, report);
         break;
       case "latin1":
-        scanRun(data, options.minLength, isLatin1Printable, "latin1", push, isFull);
+        scanRun(data, options.minLength, isLatin1Printable, "latin1", push, isFull, report);
         break;
       case "utf8":
-        scanUtf8(data, options.minLength, push, isFull);
+        scanUtf8(data, options.minLength, push, isFull, report);
         break;
       case "utf16le":
-        scanUtf16(data, options.minLength, "le", push, isFull);
+        scanUtf16(data, options.minLength, "le", push, isFull, report);
         break;
       case "utf16be":
-        scanUtf16(data, options.minLength, "be", push, isFull);
+        scanUtf16(data, options.minLength, "be", push, isFull, report);
         break;
     }
   }
 
   out.sort((a, b) => a.offset - b.offset);
+  onProgress?.({ scanned: data.length, total: data.length, strings: out });
   return { strings: out, truncated, scannedBytes: data.length };
 }
 
@@ -105,9 +123,11 @@ function scanRun(
   encoding: StringEncoding,
   push: (item: ExtractedString) => void,
   isFull: () => boolean,
+  report: (i: number) => void,
 ): void {
   let start = -1;
   for (let i = 0; i < data.length; i++) {
+    if (i % PROGRESS_INTERVAL === 0) report(i);
     if (isFull()) return;
     const ok = isPrintable(data[i]);
     if (ok && start < 0) start = i;
@@ -145,9 +165,11 @@ function scanUtf8(
   minLen: number,
   push: (item: ExtractedString) => void,
   isFull: () => boolean,
+  report: (i: number) => void,
 ): void {
   let i = 0;
   while (i < data.length) {
+    if (i % PROGRESS_INTERVAL === 0) report(i);
     if (isFull()) return;
     const start = i;
     let chars = 0;
@@ -183,10 +205,12 @@ function scanUtf16(
   endian: "le" | "be",
   push: (item: ExtractedString) => void,
   isFull: () => boolean,
+  report: (i: number) => void,
 ): void {
   let start = -1;
   let chars = 0;
   for (let i = 0; i + 1 < data.length; i += 2) {
+    if (i % PROGRESS_INTERVAL === 0) report(i);
     if (isFull()) return;
     const lo = endian === "le" ? data[i] : data[i + 1];
     const hi = endian === "le" ? data[i + 1] : data[i];
