@@ -1,10 +1,32 @@
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "node:path";
 
+function wasmMimeType(): Plugin {
+  return {
+    name: "hexora-wasm-mime",
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (req.url?.includes(".wasm")) {
+          res.setHeader("Content-Type", "application/wasm");
+        }
+        next();
+      });
+    },
+    configurePreviewServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (req.url?.includes(".wasm")) {
+          res.setHeader("Content-Type", "application/wasm");
+        }
+        next();
+      });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react(), tailwindcss(), wasmMimeType()],
   resolve: {
     alias: {
       "@hexora/shared": path.resolve(__dirname, "../shared/src/index.ts"),
@@ -15,7 +37,8 @@ export default defineConfig({
     format: "es",
   },
   optimizeDeps: {
-    include: ["compressjs", "fzstd", "xz-decompress"],
+    include: ["fzstd", "xz-decompress"],
+    exclude: ["compressjs"],
   },
   server: {
     proxy: {

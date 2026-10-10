@@ -2,8 +2,12 @@ import { gunzipSync, unzipSync, zlibSync, unzlibSync } from "fflate";
 import { decompress as zstdDecompress } from "fzstd";
 import { decompress as xzDecompress } from "xz-decompress";
 import type { CompressionKind } from "@hexora/shared";
-// compressjs is AMD/CJS; Vite prebundles default export
-import compressjs from "compressjs";
+
+async function bzip2Decompress(slice: Uint8Array): Promise<Uint8Array> {
+  const compressjs = await import("compressjs");
+  const mod = compressjs.default ?? compressjs;
+  return Uint8Array.from(mod.Bzip2.decompressFile(slice) as number[]);
+}
 
 export interface DecompressResult {
   ok: boolean;
@@ -39,7 +43,7 @@ export async function tryDecompress(
         break;
       }
       case "bzip2":
-        out = Uint8Array.from(compressjs.Bzip2.decompressFile(slice) as number[]);
+        out = await bzip2Decompress(slice);
         break;
       case "zstd":
         out = zstdDecompress(slice);
