@@ -3,9 +3,10 @@ import type { BinaryAnalysis } from "../lib/binaryAnalysis";
 interface Props {
   analysis: BinaryAnalysis;
   onSelectOffset: (offset: number) => void;
+  onDisasmAt?: (fileOffset: number) => void;
 }
 
-export function BinaryStructureView({ analysis, onSelectOffset }: Props) {
+export function BinaryStructureView({ analysis, onSelectOffset, onDisasmAt }: Props) {
   if (analysis.kind === "pe" && analysis.pe) {
     const pe = analysis.pe;
     return (
@@ -33,6 +34,7 @@ export function BinaryStructureView({ analysis, onSelectOffset }: Props) {
             s.permissions,
           ])}
           onCellClick={(row) => onSelectOffset(pe.sections[row]!.pointerToRawData)}
+          onDisasmRow={(row) => onDisasmAt?.(pe.sections[row]!.pointerToRawData)}
         />
         <SectionTable
           title="Data directories"
@@ -124,6 +126,10 @@ export function BinaryStructureView({ analysis, onSelectOffset }: Props) {
             const s = elf.sectionHeaders[row]!;
             if (!s.isNobits) onSelectOffset(Number(s.offset));
           }}
+          onDisasmRow={(row) => {
+            const s = elf.sectionHeaders[row]!;
+            if (!s.isNobits) onDisasmAt?.(Number(s.offset));
+          }}
         />
         {elf.symbols.length > 0 && (
           <SectionTable
@@ -168,15 +174,22 @@ function SectionTable({
   columns,
   rows,
   onCellClick,
+  onDisasmRow,
 }: {
   title: string;
   columns: string[];
   rows: string[][];
   onCellClick?: (rowIndex: number) => void;
+  onDisasmRow?: (rowIndex: number) => void;
 }) {
   return (
     <div>
-      <h4 className="text-moon-mist text-body-sm font-medium mb-2">{title}</h4>
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <h4 className="text-moon-mist text-body-sm font-medium">{title}</h4>
+        {onDisasmRow && rows.length > 0 && (
+          <span className="text-caption text-fog-veil">行名クリック → Hex · Disasm でセクション先頭</span>
+        )}
+      </div>
       <table className="w-full text-caption font-dotdigital">
         <thead className="text-fog-veil">
           <tr>
@@ -191,9 +204,24 @@ function SectionTable({
               {row.map((cell, ci) => (
                 <td key={ci} className="py-1 pr-2 text-moon-mist">
                   {ci === 0 && onCellClick ? (
-                    <button type="button" className="hover:text-frost-glow hover:underline" onClick={() => onCellClick(ri)}>
-                      {cell}
-                    </button>
+                    <span className="inline-flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="hover:text-frost-glow hover:underline"
+                        onClick={() => onCellClick(ri)}
+                      >
+                        {cell}
+                      </button>
+                      {onDisasmRow && (
+                        <button
+                          type="button"
+                          className="text-blueprint-blue text-caption hover:underline"
+                          onClick={() => onDisasmRow(ri)}
+                        >
+                          Disasm
+                        </button>
+                      )}
+                    </span>
                   ) : (
                     cell
                   )}

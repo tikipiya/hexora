@@ -1,10 +1,10 @@
 import { useCallback, useMemo, useState } from "react";
-import type { Arch } from "@hexora/shared";
 import { Background } from "./components/Background";
 import { AddressConverter } from "./components/AddressConverter";
 import { AnalysisWarnings } from "./components/AnalysisWarnings";
 import { BinaryStructureView } from "./components/BinaryStructureView";
 import { DisasmPanel } from "./components/DisasmPanel";
+import { DisasmTargetPicker, type DisasmSliceState } from "./components/DisasmTargetPicker";
 import { EntropyMap } from "./components/EntropyMap";
 import { Eyebrow } from "./components/Eyebrow";
 import { FileDropzone, FileMeta } from "./components/FileDropzone";
@@ -36,12 +36,8 @@ export function App() {
   );
   const [stringMinLen, setStringMinLen] = useState(DEFAULT_STRING_OPTIONS.minLength);
   const [stringDedupe, setStringDedupe] = useState(DEFAULT_STRING_OPTIONS.dedupe);
-  const [disasmSlice, setDisasmSlice] = useState<{
-    arch: Arch;
-    base: number;
-    bytes: Uint8Array;
-    label: string;
-  } | null>(null);
+  const [disasmSlice, setDisasmSlice] = useState<DisasmSliceState | null>(null);
+  const [disasmJumpOffset, setDisasmJumpOffset] = useState<number | undefined>();
 
   const stringOptions = useMemo(
     () => ({
@@ -99,40 +95,8 @@ export function App() {
       const a = analyzeBinary(loaded.buffer, "lenient");
       setAnalysis(a);
 
-      if (a.pe) {
-        const text = a.pe.sections.find((s) =>
-          s.name.toLowerCase().includes(".text"),
-        );
-        const sec = text ?? a.pe.sections[0];
-        const arch = a.pe.coff.machine === 0x8664 ? "x64" : a.pe.coff.machine === 0x014c ? "x86" : null;
-        if (sec && arch) {
-          const start = sec.pointerToRawData;
-          const end = Math.min(start + sec.sizeOfRawData, loaded.bytes.length);
-          setDisasmSlice({
-            arch,
-            base: Number(a.pe.imageBase + BigInt(sec.virtualAddress)),
-            bytes: loaded.bytes.subarray(start, Math.min(end, start + 65536)),
-            label: `${sec.name} @ ${loaded.file.name}`,
-          });
-        } else setDisasmSlice(null);
-      } else if (a.elf) {
-        const text = a.elf.sectionHeaders.find((s) => s.name === ".text");
-        const sec = text ?? a.elf.sectionHeaders.find((s) => !s.isNobits && s.size > 0n);
-        const machine = a.elf.header.machine;
-        const arch = machine === 0x3e ? "x64" : machine === 0x03 ? "x86" : null;
-        if (sec && arch && !sec.isNobits) {
-          const start = Number(sec.offset);
-          const size = Number(sec.size);
-          setDisasmSlice({
-            arch,
-            base: Number(sec.addr),
-            bytes: loaded.bytes.subarray(start, Math.min(start + size, start + 65536)),
-            label: `${sec.name} @ ${loaded.file.name}`,
-          });
-        } else setDisasmSlice(null);
-      } else {
-        setDisasmSlice(null);
-      }
+      setDisasmSlice(null);
+      setDisasmJumpOffset(undefined);
     } finally {
       setLoadBusy(false);
     }
@@ -243,7 +207,14 @@ export function App() {
             )}
 
             {tab === "structure" && (
-              <BinaryStructureView analysis={analysis} onSelectOffset={jumpTo} />
+              <BinaryStructureView
+                analysis={analysis}
+                onSelectOffset={jumpTo}
+                onDisasmAt={(offset) => {
+                  setDisasmJumpOffset(offset);
+                  setTab("disasm");
+                }}
+              />
             )}
 
             {tab === "hex" && (
@@ -276,17 +247,32 @@ export function App() {
               />
             )}
 
-            {tab === "disasm" && disasmSlice && (
-              <DisasmPanel
-                arch={disasmSlice.arch}
-                baseAddress={disasmSlice.base}
-                bytes={disasmSlice.bytes}
-                label={disasmSlice.label}
-              />
-            )}
-
-            {tab === "disasm" && !disasmSlice && (
-              <DisasmPanel arch={null} baseAddress={0} bytes={new Uint8Array()} label="" />
+            {tab === "disasm" && (
+              <div className="space-y-4">
+                <DisasmTargetPicker
+                  fileKey={fileName}
+                  data={data}
+                  analysis={analysis}
+                  value={disasmSlice}
+                  onChange={setDisasmSlice}
+                  jumpFileOffset={disasmJumpOffset}
+                />
+                {disasmSlice ? (
+                  <DisasmPanel
+                    arch={disasmSlice.arch}
+                    baseAddress={disasmSlice.base}
+                    bytes={disasmSlice.bytes}
+                    label={disasmSlice.label}
+                  />
+                ) : (
+                  <DisasmPanel
+                    arch={null}
+                    baseAddress={0}
+                    bytes={new Uint8Array()}
+                    label=""
+                  />
+                )}
+              </div>
             )}
 
             {tab === "transform" && (
