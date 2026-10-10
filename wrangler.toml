@@ -4,3 +4,4 @@ pages_build_output_dir = "web/dist"
 
 [vars]
 MAX_DISASM_BYTES = "65536"
+MAX_ANALYZE_BYTES = "4194304"

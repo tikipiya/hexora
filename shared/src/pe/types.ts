@@ -1,0 +1,88 @@
+import type { ParseIssue } from "../binary/errors.ts";
+
+export interface DosHeader {
+  magic: number;
+  cblp: number;
+  e_lfanew: number;
+  stubSize: number;
+}
+
+export interface CoffHeader {
+  machine: number;
+  machineName: string;
+  numberOfSections: number;
+  timeDateStamp: number;
+  pointerToSymbolTable: number;
+  numberOfSymbols: number;
+  sizeOfOptionalHeader: number;
+  characteristics: number;
+}
+
+export interface DataDirectoryEntry {
+  index: number;
+  name: string;
+  rva: number;
+  size: number;
+  fileOffset: number | null;
+  valid: boolean;
+}
+
+export interface PeSection {
+  name: string;
+  virtualSize: number;
+  virtualAddress: number;
+  sizeOfRawData: number;
+  pointerToRawData: number;
+  characteristics: number;
+  permissions: string;
+}
+
+export interface PeImportEntry {
+  dll: string;
+  functions: { name: string | null; ordinal: number | null; iatRva: number }[];
+}
+
+export interface PeExportEntry {
+  name: string | null;
+  ordinal: number;
+  rva: number;
+}
+
+export interface PeParseResult {
+  ok: boolean;
+  dos: DosHeader;
+  coff: CoffHeader;
+  isPe32Plus: boolean;
+  subsystem: number;
+  subsystemName: string;
+  imageBase: bigint;
+  entryPointRva: number;
+  sectionAlignment: number;
+  fileAlignment: number;
+  sizeOfImage: number;
+  sizeOfHeaders: number;
+  sections: PeSection[];
+  dataDirectories: DataDirectoryEntry[];
+  imports: PeImportEntry[];
+  exports: PeExportEntry[];
+  issues: ParseIssue[];
+}
+
+export const DATA_DIR_NAMES = [
+  "Export",
+  "Import",
+  "Resource",
+  "Exception",
+  "Security",
+  "BaseReloc",
+  "Debug",
+  "Architecture",
+  "GlobalPtr",
+  "TLS",
+  "LoadConfig",
+  "BoundImport",
+  "IAT",
+  "DelayImport",
+  "CLR",
+  "Reserved",
+] as const;

@@ -3,6 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
     "dev": "npm run dev --workspace=web",
     "dev:api": "wrangler pages dev web/dist --compatibility-date=2024-09-23 --port=8788",
     "build": "npm run build --workspace=web",
@@ -14,6 +16,7 @@
     "shared"
   ],
   "devDependencies": {
+    "vitest": "^3.0.5",
     "wrangler": "^4.14.0"
   }
 }

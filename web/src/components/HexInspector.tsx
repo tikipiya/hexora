@@ -1,12 +1,12 @@
 import { useMemo } from "react";
-import type { MemoryMap } from "../lib/memoryMap";
+import type { BinaryAnalysis } from "../lib/binaryAnalysis";
 import { inspectAt, inspectStructBlock } from "../lib/structInspector";
 
 interface Props {
   data: Uint8Array;
   cursor: number;
   selection: { start: number; end: number } | null;
-  memoryMap: MemoryMap | null;
+  analysis: BinaryAnalysis | null;
   onFollow: (fileOffset: number) => void;
 }
 
@@ -14,27 +14,28 @@ export function HexInspector({
   data,
   cursor,
   selection,
-  memoryMap,
+  analysis,
   onFollow,
 }: Props) {
   const fields = useMemo(
-    () => inspectAt({ data, offset: cursor, map: memoryMap }),
-    [data, cursor, memoryMap],
+    () => inspectAt({ data, offset: cursor, analysis }),
+    [data, cursor, analysis],
   );
 
   const structFields = useMemo(() => {
     if (!selection || selection.end <= selection.start) return [];
     const len = selection.end - selection.start + 1;
     if (len < 8) return [];
-    const stride = memoryMap?.is64 ? 8 : 4;
+    const stride =
+      analysis?.pe?.isPe32Plus || analysis?.elf?.header.class === 64 ? 8 : 4;
     return inspectStructBlock(
       data,
       selection.start,
       selection.end,
-      memoryMap,
+      analysis,
       stride,
     );
-  }, [data, selection, memoryMap]);
+  }, [data, selection, analysis]);
 
   return (
     <div className="glass-card hairline-inset p-4 flex flex-col gap-4 min-h-[200px] max-h-[min(70vh,560px)] overflow-auto">
@@ -44,10 +45,14 @@ export function HexInspector({
         </h3>
         <p className="text-caption text-fog-veil">
           カーソル 0x{cursor.toString(16)}
-          {memoryMap && (
+          {analysis?.kind === "pe" && (
             <span className="ml-2">
-              · {memoryMap.is64 ? "64-bit" : "32-bit"} ·{" "}
-              {memoryMap.littleEndian ? "LE" : "BE"}
+              · {analysis.pe?.isPe32Plus ? "PE32+" : "PE32"} · LE
+            </span>
+          )}
+          {analysis?.kind === "elf" && (
+            <span className="ml-2">
+              · ELF{analysis.elf?.header.class} · {analysis.elf?.header.endian}
             </span>
           )}
         </p>
@@ -57,13 +62,13 @@ export function HexInspector({
 
       {structFields.length > 0 && (
         <FieldTable
-          title={`選択範囲（${memoryMap?.is64 ? "qword" : "dword"} 配列）`}
+          title={`選択範囲（${analysis?.pe?.isPe32Plus || analysis?.elf?.header.class === 64 ? "qword" : "dword"} 配列）`}
           fields={structFields}
           onFollow={onFollow}
         />
       )}
 
-      {!memoryMap && (
+      {!analysis?.elfSpace && !analysis?.peSpace && (
         <p className="text-caption text-fog-veil">
           PE / ELF 以外はポインタ追跡は利用できません。
         </p>

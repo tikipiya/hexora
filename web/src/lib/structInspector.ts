@@ -1,5 +1,6 @@
-import type { MemoryMap } from "./memoryMap";
-import { offsetToVa, resolvePointer } from "./memoryMap";
+import type { BinaryAnalysis } from "./binaryAnalysis";
+import { resolvePointerForUi } from "./memoryMap";
+import { elfFileToVa, peFileToRva } from "@hexora/shared";
 
 export interface InspectedField {
   id: string;
@@ -15,11 +16,19 @@ export interface InspectedField {
 export interface InspectContext {
   data: Uint8Array;
   offset: number;
-  map: MemoryMap | null;
+  analysis: BinaryAnalysis | null;
 }
 
 export function inspectAt(ctx: InspectContext): InspectedField[] {
-  const { data, offset, map } = ctx;
+  const { data, offset, analysis } = ctx;
+  const map = analysis;
+  const le =
+    analysis?.pe?.isPe32Plus !== undefined
+      ? true
+      : analysis?.elf?.header.endian === "BE"
+        ? false
+        : true;
+  const is64 = analysis?.pe?.isPe32Plus ?? analysis?.elf?.header.class === 64;
   if (offset < 0 || offset >= data.length) return [];
 
   const view = new DataView(
@@ -27,7 +36,6 @@ export function inspectAt(ctx: InspectContext): InspectedField[] {
     data.byteOffset,
     data.byteLength,
   );
-  const le = map?.littleEndian ?? true;
   const fields: InspectedField[] = [];
 
   const push = (field: InspectedField) => fields.push(field);
@@ -92,7 +100,7 @@ export function inspectAt(ctx: InspectContext): InspectedField[] {
       display: Number.isFinite(f32) ? f32.toPrecision(7) : String(f32),
     });
 
-    if (map && !map.is64) {
+    if (map && !is64) {
       appendPointer(push, map, offset, u32, 4, data);
     }
   }
@@ -100,7 +108,7 @@ export function inspectAt(ctx: InspectContext): InspectedField[] {
   if (offset + 8 <= data.length) {
     const lo = view.getUint32(offset, le);
     const hi = view.getUint32(offset + 4, le);
-    const u64 = map?.is64
+    const u64 = is64
       ? readU64(view, offset, le)
       : (BigInt(hi) << 32n) | BigInt(lo);
     const f64 = view.getFloat64(offset, le);
@@ -121,7 +129,7 @@ export function inspectAt(ctx: InspectContext): InspectedField[] {
       display: Number.isFinite(f64) ? String(f64) : String(f64),
     });
 
-    if (map?.is64) {
+    if (is64) {
       const va = Number(u64 & 0xffff_ffff_ffff_ffffn);
       appendPointer(push, map, offset, va, 8, data);
     }
@@ -139,17 +147,29 @@ export function inspectAt(ctx: InspectContext): InspectedField[] {
     });
   }
 
-  if (map) {
-    const va = offsetToVa(map, offset);
-    if (va !== null) {
+  if (analysis?.elfSpace) {
+    const res = elfFileToVa(analysis.elfSpace, offset);
+    if (res.vaddr) {
       push({
         id: "fileoff",
         label: "file → VA",
         offset,
         size: 0,
         rawHex: "",
-        display: `0x${va.toString(16)}`,
-        followVa: va,
+        display: res.vaddr,
+      });
+    }
+  }
+  if (analysis?.peSpace) {
+    const res = peFileToRva(analysis.peSpace, offset);
+    if (res.rva !== undefined) {
+      push({
+        id: "fileoff",
+        label: "file → RVA / VA",
+        offset,
+        size: 0,
+        rawHex: "",
+        display: `RVA 0x${res.rva.toString(16)} · VA ${res.va ?? "—"}`,
       });
     }
   }
@@ -159,13 +179,13 @@ export function inspectAt(ctx: InspectContext): InspectedField[] {
 
 function appendPointer(
   push: (f: InspectedField) => void,
-  map: MemoryMap,
+  analysis: BinaryAnalysis,
   offset: number,
   raw: number,
   size: number,
   data: Uint8Array,
 ) {
-  const resolved = resolvePointer(map, raw);
+  const resolved = resolvePointerForUi(analysis, raw);
   push({
     id: `ptr${size}`,
     label: `ptr${size * 8}`,
@@ -173,10 +193,10 @@ function appendPointer(
     size,
     rawHex: hexBytes(data, offset, size),
     display: resolved
-      ? `0x${raw.toString(16)} → VA 0x${resolved.va.toString(16)} → file 0x${resolved.fileOffset.toString(16)}`
+      ? `0x${raw.toString(16)} → ${resolved.label} → file 0x${resolved.fileOffset!.toString(16)}`
       : `0x${raw.toString(16)} (unmapped)`,
     followFileOffset: resolved?.fileOffset,
-    followVa: resolved?.va ?? raw,
+    followVa: raw,
   });
 }
 
@@ -220,14 +240,14 @@ export function inspectStructBlock(
   data: Uint8Array,
   start: number,
   end: number,
-  map: MemoryMap | null,
+  analysis: BinaryAnalysis | null,
   stride = 8,
 ): InspectedField[] {
   const out: InspectedField[] = [];
   let off = start;
   let idx = 0;
   while (off + stride <= end + 1 && off < data.length) {
-    const fields = inspectAt({ data, offset: off, map });
+    const fields = inspectAt({ data, offset: off, analysis });
     const head = fields.find((f) => f.id === (stride === 8 ? "u64" : "u32"));
     if (head) {
       out.push({

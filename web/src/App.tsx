@@ -1,6 +1,9 @@
 import { useCallback, useMemo, useState } from "react";
 import type { Arch } from "@hexora/shared";
 import { Background } from "./components/Background";
+import { AddressConverter } from "./components/AddressConverter";
+import { AnalysisWarnings } from "./components/AnalysisWarnings";
+import { BinaryStructureView } from "./components/BinaryStructureView";
 import { DisasmPanel } from "./components/DisasmPanel";
 import { EntropyMap } from "./components/EntropyMap";
 import { Eyebrow } from "./components/Eyebrow";
@@ -8,24 +11,20 @@ import { FileDropzone, FileMeta } from "./components/FileDropzone";
 import { HashPanel } from "./components/HashPanel";
 import { HexViewer } from "./components/HexViewer";
 import { StringsPanel } from "./components/StringsPanel";
-import { StructurePanel } from "./components/StructurePanel";
 import { useExtractedStrings } from "./hooks/useExtractedStrings";
-import { detectBinary } from "./lib/detect";
-import { elfSectionBytes } from "./lib/elf";
+import { analyzeBinary, type BinaryAnalysis } from "./lib/binaryAnalysis";
 import type { LoadedFile } from "./lib/fileLoad";
-import { regionsFromElf, regionsFromPe } from "./lib/hexRegions";
-import type { FileHashes } from "./lib/hash";
-import { memoryMapFromElf, memoryMapFromPe } from "./lib/memoryMap";
+import { regionsFromAnalysis } from "./lib/memoryMap";
 import { DEFAULT_STRING_OPTIONS } from "./lib/strings";
-import { peSectionBytes } from "./lib/pe";
 
-type Tab = "overview" | "hex" | "strings" | "disasm";
+type Tab = "overview" | "hex" | "strings" | "disasm" | "structure";
 
 export function App() {
   const [fileName, setFileName] = useState<string | null>(null);
   const [data, setData] = useState<Uint8Array | null>(null);
+  const [analysis, setAnalysis] = useState<BinaryAnalysis | null>(null);
   const [warnedLarge, setWarnedLarge] = useState(false);
-  const [hashes, setHashes] = useState<FileHashes | null>(null);
+  const [hashes, setHashes] = useState<LoadedFile["hashes"] | null>(null);
   const [loadBusy, setLoadBusy] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("overview");
@@ -54,29 +53,23 @@ export function App() {
   const { strings, scanning, truncated, scanProgress, usedWorker } =
     useExtractedStrings(data, stringOptions);
 
-  const detected = useMemo(
-    () => (data ? detectBinary(data.buffer as ArrayBuffer) : null),
-    [data],
+  const hexRegions = useMemo(
+    () => (analysis ? regionsFromAnalysis(analysis) : []),
+    [analysis],
   );
 
-  const hexRegions = useMemo(() => {
-    if (detected?.pe) return regionsFromPe(detected.pe);
-    if (detected?.elf) return regionsFromElf(detected.elf);
-    return [];
-  }, [detected]);
-
-  const memoryMap = useMemo(() => {
-    if (detected?.pe) return memoryMapFromPe(detected.pe);
-    if (detected?.elf) return memoryMapFromElf(detected.elf);
-    return null;
-  }, [detected]);
-
   const formatLabel = useMemo(() => {
-    if (!detected) return "Raw";
-    if (detected.format === "pe") return "PE";
-    if (detected.format === "elf") return `ELF${detected.elf?.klass ?? ""}`;
+    if (!analysis) return "Raw";
+    if (analysis.kind === "pe") return analysis.pe?.isPe32Plus ? "PE32+" : "PE32";
+    if (analysis.kind === "elf") return `ELF${analysis.elf?.header.class ?? ""}`;
     return "Unknown";
-  }, [detected]);
+  }, [analysis]);
+
+  const jumpTo = (offset: number) => {
+    setJumpOffset(offset);
+    setHexFocus(null);
+    setTab("hex");
+  };
 
   const onLoaded = useCallback(async (loaded: LoadedFile) => {
     setLoadError(null);
@@ -90,32 +83,37 @@ export function App() {
     setHexFocus(null);
 
     try {
-      const d = detectBinary(loaded.buffer);
-      if (d.pe) {
-        const text = d.pe.sections.find((s) =>
+      const a = analyzeBinary(loaded.buffer, "lenient");
+      setAnalysis(a);
+
+      if (a.pe) {
+        const text = a.pe.sections.find((s) =>
           s.name.toLowerCase().includes(".text"),
         );
-        const sec = text ?? d.pe.sections[0];
-        if (sec && d.pe.summary["Disasm arch"]) {
-          const arch = d.pe.summary["Disasm arch"] as Arch;
-          const bytes = peSectionBytes(loaded.buffer, sec);
+        const sec = text ?? a.pe.sections[0];
+        const arch = a.pe.coff.machine === 0x8664 ? "x64" : a.pe.coff.machine === 0x014c ? "x86" : null;
+        if (sec && arch) {
+          const start = sec.pointerToRawData;
+          const end = Math.min(start + sec.sizeOfRawData, loaded.bytes.length);
           setDisasmSlice({
             arch,
-            base: d.pe.imageBase + sec.virtualAddress,
-            bytes: bytes.subarray(0, Math.min(bytes.length, 65536)),
+            base: Number(a.pe.imageBase + BigInt(sec.virtualAddress)),
+            bytes: loaded.bytes.subarray(start, Math.min(end, start + 65536)),
             label: `${sec.name} @ ${loaded.file.name}`,
           });
         } else setDisasmSlice(null);
-      } else if (d.elf) {
-        const text = d.elf.sections.find((s) => s.name === ".text");
-        const sec = text ?? d.elf.sections.find((s) => s.size > 0);
-        if (sec && d.elf.summary["Disasm arch"]) {
-          const arch = d.elf.summary["Disasm arch"] as Arch;
-          const bytes = elfSectionBytes(loaded.buffer, sec);
+      } else if (a.elf) {
+        const text = a.elf.sectionHeaders.find((s) => s.name === ".text");
+        const sec = text ?? a.elf.sectionHeaders.find((s) => !s.isNobits && s.size > 0n);
+        const machine = a.elf.header.machine;
+        const arch = machine === 0x3e ? "x64" : machine === 0x03 ? "x86" : null;
+        if (sec && arch && !sec.isNobits) {
+          const start = Number(sec.offset);
+          const size = Number(sec.size);
           setDisasmSlice({
             arch,
-            base: sec.address,
-            bytes: bytes.subarray(0, Math.min(bytes.length, 65536)),
+            base: Number(sec.addr),
+            bytes: loaded.bytes.subarray(start, Math.min(start + size, start + 65536)),
             label: `${sec.name} @ ${loaded.file.name}`,
           });
         } else setDisasmSlice(null);
@@ -131,12 +129,15 @@ export function App() {
     setData(null);
     setFileName(null);
     setHashes(null);
+    setAnalysis(null);
     setDisasmSlice(null);
     setWarnedLarge(false);
     setLoadError(null);
     setJumpOffset(undefined);
     setHexFocus(null);
   };
+
+  const allIssues = analysis?.issues ?? [];
 
   return (
     <div className="relative min-h-screen">
@@ -160,8 +161,7 @@ export function App() {
             Hexora
           </h1>
           <p className="text-moon-mist text-body max-w-[640px] mx-auto">
-            PE / ELF の構造、ヘックス、ストリング、エントロピー、ハッシュをブラウザで解析。
-            大きなコードセクションのディスアセンブリは Cloudflare Workers で実行します。
+            CTF 向けバイナリ解析 — ブラウザ内パース + 必要時のみ Workers（ディスアセンブリ / API 検証）。
           </p>
         </section>
 
@@ -174,7 +174,7 @@ export function App() {
           </>
         )}
 
-        {data && fileName && (
+        {data && fileName && analysis && (
           <div className="space-y-6">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <FileMeta
@@ -194,11 +194,13 @@ export function App() {
             </div>
 
             <HashPanel hashes={hashes} loading={!hashes && loadBusy} />
+            <AnalysisWarnings issues={allIssues} />
 
             <nav className="flex flex-wrap gap-2">
               {(
                 [
                   ["overview", "Overview"],
+                  ["structure", "Structure"],
                   ["hex", "Hex"],
                   ["strings", "Strings"],
                   ["disasm", "Disasm"],
@@ -221,24 +223,13 @@ export function App() {
 
             {tab === "overview" && (
               <div className="grid gap-6 lg:grid-cols-2">
-                <StructurePanel
-                  pe={detected?.pe ?? null}
-                  elf={detected?.elf ?? null}
-                  onSectionSelect={(o) => {
-                    setJumpOffset(o);
-                    setHexFocus(null);
-                    setTab("hex");
-                  }}
-                />
-                <EntropyMap
-                  data={data}
-                  onSelect={(o) => {
-                    setJumpOffset(o);
-                    setHexFocus(null);
-                    setTab("hex");
-                  }}
-                />
+                <AddressConverter analysis={analysis} onJump={jumpTo} />
+                <EntropyMap data={data} onSelect={jumpTo} />
               </div>
+            )}
+
+            {tab === "structure" && (
+              <BinaryStructureView analysis={analysis} onSelectOffset={jumpTo} />
             )}
 
             {tab === "hex" && (
@@ -247,7 +238,7 @@ export function App() {
                 highlightOffset={jumpOffset}
                 focusRange={hexFocus ?? undefined}
                 regions={hexRegions}
-                memoryMap={memoryMap}
+                analysis={analysis}
                 onJump={(o) => setJumpOffset(o)}
               />
             )}

@@ -1,105 +1,73 @@
-import type { ElfAnalysis } from "./elf";
-import type { PeAnalysis } from "./pe";
+import type { BinaryAnalysis } from "./binaryAnalysis";
+import {
+  elfFileToVa,
+  elfVaToFile,
+  peRvaToFile,
+  peRvaToVa,
+  peVaToRva,
+} from "@hexora/shared";
+import type { HexRegion } from "./hexRegions";
 
-export interface MemorySegment {
-  name: string;
-  vaStart: number;
-  vaEnd: number;
-  fileStart: number;
-  fileEnd: number;
-}
-
-export interface MemoryMap {
-  is64: boolean;
-  littleEndian: boolean;
-  imageBase: number;
-  segments: MemorySegment[];
-}
-
-export function memoryMapFromPe(pe: PeAnalysis): MemoryMap {
-  const segments: MemorySegment[] = pe.sections
-    .filter((s) => s.rawSize > 0)
-    .map((s) => ({
-      name: s.name || ".unnamed",
-      vaStart: pe.imageBase + s.virtualAddress,
-      vaEnd: pe.imageBase + s.virtualAddress + Math.max(s.virtualSize, s.rawSize),
-      fileStart: s.rawOffset,
-      fileEnd: s.rawOffset + s.rawSize,
-    }));
-  return {
-    is64: pe.is64,
-    littleEndian: true,
-    imageBase: pe.imageBase,
-    segments,
-  };
-}
-
-export function memoryMapFromElf(elf: ElfAnalysis): MemoryMap {
-  const le = elf.endian === "LE";
-  const segments: MemorySegment[] = elf.sections
-    .filter((s) => s.size > 0 && s.offset > 0)
-    .map((s) => ({
-      name: s.name,
-      vaStart: s.address,
-      vaEnd: s.address + s.size,
-      fileStart: s.offset,
-      fileEnd: s.offset + s.size,
-    }));
-  return {
-    is64: elf.klass === 64,
-    littleEndian: le,
-    imageBase: 0,
-    segments,
-  };
-}
-
-export function vaToOffset(map: MemoryMap, va: number): number | null {
-  for (const s of map.segments) {
-    if (va >= s.vaStart && va < s.vaEnd) {
-      const delta = va - s.vaStart;
-      const off = s.fileStart + delta;
-      if (off >= s.fileStart && off < s.fileEnd) return off;
-    }
-  }
-  return null;
-}
-
-export function offsetToVa(map: MemoryMap, fileOffset: number): number | null {
-  for (const s of map.segments) {
-    if (fileOffset >= s.fileStart && fileOffset < s.fileEnd) {
-      return s.vaStart + (fileOffset - s.fileStart);
-    }
-  }
-  return null;
-}
-
-export function segmentNameAt(map: MemoryMap, fileOffset: number): string | null {
-  for (const s of map.segments) {
-    if (fileOffset >= s.fileStart && fileOffset < s.fileEnd) return s.name;
-  }
-  return null;
-}
-
-/** ポインタ値がモジュール内 VA として妥当か */
-export function looksLikeMappedVa(map: MemoryMap, va: number): boolean {
-  return resolvePointer(map, va) !== null;
-}
-
-/** VA / RVA / 生値からファイルオフセットを解決 */
-export function resolvePointer(
-  map: MemoryMap,
+/** UI 用: ファイルオフセットへのポインタ解決 */
+export function resolvePointerForUi(
+  analysis: BinaryAnalysis,
   raw: number,
-): { va: number; fileOffset: number } | null {
-  const candidates = [raw];
-  if (map.imageBase > 0) {
-    candidates.push(map.imageBase + raw);
+): { fileOffset?: number; label: string } | null {
+  if (analysis.peSpace) {
+    const rva = raw < analysis.peSpace.sizeOfHeaders ? raw : null;
+    if (rva !== null) {
+      const res = peRvaToFile(analysis.peSpace, rva);
+      if (res.fileOffset !== undefined) {
+        return { fileOffset: res.fileOffset, label: `RVA 0x${rva.toString(16)}` };
+      }
+    }
+    const va = BigInt(raw);
+    const asRva = peVaToRva(analysis.peSpace, va);
+    if (asRva !== null) {
+      const res = peRvaToFile(analysis.peSpace, asRva);
+      if (res.fileOffset !== undefined) {
+        return { fileOffset: res.fileOffset, label: `VA 0x${raw.toString(16)}` };
+      }
+    }
+    const res = peRvaToFile(analysis.peSpace, raw);
+    if (res.fileOffset !== undefined) {
+      return { fileOffset: res.fileOffset, label: `RVA 0x${raw.toString(16)}` };
+    }
   }
-  if (raw > map.imageBase) {
-    candidates.push(raw - map.imageBase + map.imageBase);
-  }
-  for (const va of candidates) {
-    const fileOffset = vaToOffset(map, va);
-    if (fileOffset !== null) return { va, fileOffset };
+  if (analysis.elfSpace) {
+    const res = elfVaToFile(analysis.elfSpace, BigInt(raw));
+    if (res.fileOffset !== undefined) {
+      return { fileOffset: res.fileOffset, label: `VA ${res.vaddr}` };
+    }
+    const f2v = elfFileToVa(analysis.elfSpace, raw);
+    if (f2v.fileOffset !== undefined) return { fileOffset: raw, label: "file offset" };
   }
   return null;
+}
+
+export function regionsFromAnalysis(analysis: BinaryAnalysis): HexRegion[] {
+  if (analysis.pe?.sections) {
+    return analysis.pe.sections
+      .filter((s) => s.sizeOfRawData > 0)
+      .map((s) => ({
+        start: s.pointerToRawData,
+        end: s.pointerToRawData + s.sizeOfRawData,
+        label: s.name || ".unnamed",
+      }));
+  }
+  if (analysis.elf?.sectionHeaders) {
+    return analysis.elf.sectionHeaders
+      .filter((s) => !s.isNobits && s.fileBackedSize > 0n)
+      .map((s) => ({
+        start: Number(s.offset),
+        end: Number(s.offset + s.fileBackedSize),
+        label: s.name,
+      }));
+  }
+  return [];
+}
+
+export function peRvaToVaString(analysis: BinaryAnalysis, rva: number): string {
+  if (!analysis.peSpace) return `0x${rva.toString(16)}`;
+  return peRvaToVa(analysis.peSpace, rva).toString();
 }

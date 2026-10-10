@@ -4,6 +4,9 @@
 
 ## 機能
 
+- **共有パーサー (`@hexora/shared`)** — `BinaryReader`、ELF（Phdr/Shdr/sym/dynamic/rel）、PE（Data Directory、Import/Export）、厳密/寛容モード
+- **アドレス変換** — ELF は PT_LOAD 基準（BSS 識別）、PE は RVA/VA/File（未初期化セクション識別）
+- **Workers API** — `POST /api/analyze/{elf,pe}`、`POST /api/address/{elf,pe}`（base64、最大 4 MiB 既定）
 - **Structure** — PE / ELF ヘッダーとセクション表
 - **Hex** — 16 バイト行、オフセット / hex / ASCII 検索
 - **Strings** — ASCII / UTF-16LE 抽出

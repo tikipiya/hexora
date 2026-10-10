@@ -17,7 +17,7 @@ import {
 import { HexInspector } from "./HexInspector";
 import type { HexRegion } from "../lib/hexRegions";
 import { regionAt } from "../lib/hexRegions";
-import type { MemoryMap } from "../lib/memoryMap";
+import type { BinaryAnalysis } from "../lib/binaryAnalysis";
 
 const ROW_BYTES = 16;
 const ROW_HEIGHT = 24;
@@ -28,7 +28,7 @@ interface Props {
   highlightOffset?: number;
   focusRange?: { start: number; end: number };
   regions?: HexRegion[];
-  memoryMap?: MemoryMap | null;
+  analysis?: BinaryAnalysis | null;
   onJump?: (offset: number) => void;
 }
 
@@ -37,7 +37,7 @@ export function HexViewer({
   highlightOffset,
   focusRange,
   regions = [],
-  memoryMap = null,
+  analysis = null,
   onJump,
 }: Props) {
   const [search, setSearch] = useState("");
@@ -268,7 +268,7 @@ export function HexViewer({
       data={data}
       cursor={Math.min(cursor, data.length - 1)}
       selection={selectionRange}
-      memoryMap={memoryMap}
+      analysis={analysis}
       onFollow={follow}
     />
     </div>
