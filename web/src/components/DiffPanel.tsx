@@ -6,9 +6,17 @@ interface Props {
   primary: Uint8Array;
   primaryName: string;
   onJump: (offset: number) => void;
+  overlayEnabled: boolean;
+  onOverlayChange: (enabled: boolean, secondary: Uint8Array | null) => void;
 }
 
-export function DiffPanel({ primary, primaryName, onJump }: Props) {
+export function DiffPanel({
+  primary,
+  primaryName,
+  onJump,
+  overlayEnabled,
+  onOverlayChange,
+}: Props) {
   const [secondary, setSecondary] = useState<Uint8Array | null>(null);
   const [secondaryName, setSecondaryName] = useState<string | null>(null);
   const [summary, setSummary] = useState<DiffSummary | null>(null);
@@ -26,6 +34,7 @@ export function DiffPanel({ primary, primaryName, onJump }: Props) {
       setSecondary(loaded.bytes);
       setSecondaryName(loaded.file.name);
       runCompare(loaded.bytes);
+      onOverlayChange(overlayEnabled, loaded.bytes);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Load failed");
     }
@@ -55,13 +64,26 @@ export function DiffPanel({ primary, primaryName, onJump }: Props) {
             if (f) void onPick(f);
           }}
         />
-        <button
-          type="button"
-          className="rounded-[var(--radius-buttons)] px-4 py-2 text-body-sm hairline-inset text-frost-glow"
-          onClick={() => inputRef.current?.click()}
-        >
-          比較ファイルを選ぶ
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            className="rounded-[var(--radius-buttons)] px-4 py-2 text-body-sm hairline-inset text-frost-glow"
+            onClick={() => inputRef.current?.click()}
+          >
+            比較ファイルを選ぶ
+          </button>
+          {secondary && (
+            <button
+              type="button"
+              className={`rounded-[var(--radius-buttons)] px-4 py-2 text-body-sm hairline-inset ${
+                overlayEnabled ? "text-pure-white bg-[rgba(255,120,80,0.2)]" : "text-frost-glow"
+              }`}
+              onClick={() => onOverlayChange(!overlayEnabled, secondary)}
+            >
+              Hex オーバーレイ {overlayEnabled ? "ON" : "OFF"}
+            </button>
+          )}
+        </div>
       </div>
 
       {error && <p className="text-ember-glow text-caption">{error}</p>}

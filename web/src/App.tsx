@@ -46,6 +46,8 @@ export function App() {
     null,
   );
   const [transformScope, setTransformScope] = useState<TransformScopeMode>("full");
+  const [diffPeer, setDiffPeer] = useState<Uint8Array | null>(null);
+  const [diffOverlay, setDiffOverlay] = useState(false);
 
   const stringOptions = useMemo(
     () => ({
@@ -290,6 +292,7 @@ export function App() {
                 analysis={analysis}
                 onJump={(o) => setJumpOffset(o)}
                 onSelectionRangeChange={setHexSelection}
+                diffPeer={diffOverlay ? diffPeer : null}
               />
             )}
 
@@ -341,7 +344,17 @@ export function App() {
             )}
 
             {tab === "diff" && fileName && (
-              <DiffPanel primary={data} primaryName={fileName} onJump={jumpTo} />
+              <DiffPanel
+                primary={data}
+                primaryName={fileName}
+                onJump={jumpTo}
+                overlayEnabled={diffOverlay}
+                onOverlayChange={(on, sec) => {
+                  setDiffOverlay(on);
+                  setDiffPeer(sec);
+                  if (on) setTab("hex");
+                }}
+              />
             )}
 
             {tab === "transform" && transformWorkData && (

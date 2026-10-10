@@ -31,6 +31,8 @@ interface Props {
   analysis?: BinaryAnalysis | null;
   onJump?: (offset: number) => void;
   onSelectionRangeChange?: (range: { start: number; end: number } | null) => void;
+  /** Diff タブで選んだ比較ファイル（同じオフセットで色付け） */
+  diffPeer?: Uint8Array | null;
 }
 
 export function HexViewer({
@@ -41,6 +43,7 @@ export function HexViewer({
   analysis = null,
   onJump,
   onSelectionRangeChange,
+  diffPeer = null,
 }: Props) {
   const [search, setSearch] = useState("");
   const [matchIndex, setMatchIndex] = useState(0);
@@ -50,7 +53,10 @@ export function HexViewer({
   const [scrollTop, setScrollTop] = useState(0);
   const [viewportH, setViewportH] = useState(480);
   const scrollerRef = useRef<HTMLDivElement>(null);
-  const addrWidth = offsetAddressWidth(data.length);
+  const viewLen = diffPeer
+    ? Math.max(data.length, diffPeer.length)
+    : data.length;
+  const addrWidth = offsetAddressWidth(viewLen);
 
   const matches: HexSearchMatch[] = useMemo(() => {
     const q = parseSearchInput(search);
@@ -62,7 +68,7 @@ export function HexViewer({
       ? matches[Math.min(matchIndex, matches.length - 1)]!.offset
       : highlightOffset;
 
-  const rowCount = Math.ceil(data.length / ROW_BYTES) || 1;
+  const rowCount = Math.ceil(viewLen / ROW_BYTES) || 1;
 
   const { startRow, endRow } = useMemo(() => {
     const first = Math.floor(scrollTop / ROW_HEIGHT);
@@ -186,6 +192,11 @@ export function HexViewer({
           {regionLabel && (
             <p className="text-caption text-fog-veil mt-1">Section: {regionLabel}</p>
           )}
+          {diffPeer && (
+            <p className="text-caption text-ember-glow/90 mt-1">
+              Diff オーバーレイ ON — オレンジはバイト不一致
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap gap-2 w-full lg:w-auto">
           <input
@@ -261,6 +272,7 @@ export function HexViewer({
                   activeOffset={activeOffset}
                   selection={selectionRange}
                   regions={regions}
+                  diffPeer={diffPeer}
                   onByteClick={onByteClick}
                 />
               );
@@ -290,6 +302,7 @@ function HexRow({
   activeOffset,
   selection,
   regions,
+  diffPeer,
   onByteClick,
 }: {
   top: number;
@@ -300,6 +313,7 @@ function HexRow({
   activeOffset?: number;
   selection: { start: number; end: number } | null;
   regions: HexRegion[];
+  diffPeer: Uint8Array | null;
   onByteClick: (offset: number, extend: boolean) => void;
 }) {
   const region = regionAt(regions, offset);
@@ -318,30 +332,44 @@ function HexRow({
       <span className="text-frost-glow tracking-wider flex">
         {Array.from({ length: ROW_BYTES }, (_, i) => {
           const pos = offset + i;
-          if (pos >= data.length) {
+          const hasA = pos < data.length;
+          const hasB = diffPeer != null && pos < diffPeer.length;
+          if (!hasA && !hasB) {
             return (
               <span key={i} className="inline-block w-[1.35rem] text-center opacity-30">
                 ··
               </span>
             );
           }
-          const b = data[pos];
+          const b = hasA ? data[pos]! : 0;
+          const peer = hasB ? diffPeer![pos]! : undefined;
+          const isDiff =
+            diffPeer != null &&
+            (hasA !== hasB || (hasA && hasB && b !== peer));
           const isMatch = matchSet.has(pos);
           const inSel =
             selection && pos >= selection.start && pos <= selection.end;
           const isActive = activeOffset === pos;
+          const display = hasA ? b.toString(16).padStart(2, "0") : "--";
           return (
             <button
               key={i}
               type="button"
+              title={
+                isDiff && peer !== undefined
+                  ? `B=0x${peer.toString(16)}`
+                  : isDiff
+                    ? "片方のみ存在"
+                    : undefined
+              }
               className={`inline-block w-[1.35rem] text-center rounded-sm hover:bg-[rgba(186,214,247,0.12)] ${
                 isActive ? "bg-[rgba(102,58,243,0.35)]" : ""
               } ${isMatch ? "text-blueprint-blue" : ""} ${
                 inSel ? "bg-[rgba(199,211,234,0.15)]" : ""
-              }`}
+              } ${isDiff ? "bg-[rgba(255,120,80,0.35)] text-ember-glow" : ""}`}
               onClick={(e) => onByteClick(pos, e.shiftKey)}
             >
-              {b.toString(16).padStart(2, "0")}
+              {display}
             </button>
           );
         })}
@@ -349,9 +377,17 @@ function HexRow({
       <span className="text-moon-mist">
         {Array.from({ length: ROW_BYTES }, (_, i) => {
           const pos = offset + i;
-          if (pos >= data.length) return " ";
+          if (pos >= data.length) {
+            if (diffPeer && pos < diffPeer.length) return "?";
+            return " ";
+          }
           const b = data[pos];
-          return b >= 0x20 && b <= 0x7e ? String.fromCharCode(b) : ".";
+          const peer = diffPeer && pos < diffPeer.length ? diffPeer[pos] : undefined;
+          const ch = b >= 0x20 && b <= 0x7e ? String.fromCharCode(b) : ".";
+          if (diffPeer && peer !== undefined && peer !== b) {
+            return peer >= 0x20 && peer <= 0x7e ? String.fromCharCode(peer) : "?";
+          }
+          return ch;
         }).join("")}
       </span>
     </div>
