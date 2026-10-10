@@ -1,12 +1,15 @@
 import { useMemo } from "react";
 import type { BinaryAnalysis } from "../lib/binaryAnalysis";
 import { inspectAt, inspectStructBlock } from "../lib/structInspector";
+import { XrefPanel } from "./XrefPanel";
+import type { XrefDatabase } from "@hexora/shared";
 
 interface Props {
   data: Uint8Array;
   cursor: number;
   selection: { start: number; end: number } | null;
   analysis: BinaryAnalysis | null;
+  xrefDatabase?: XrefDatabase | null;
   onFollow: (fileOffset: number) => void;
 }
 
@@ -15,6 +18,7 @@ export function HexInspector({
   cursor,
   selection,
   analysis,
+  xrefDatabase,
   onFollow,
 }: Props) {
   const fields = useMemo(
@@ -68,7 +72,12 @@ export function HexInspector({
         />
       )}
 
-      {!analysis?.elfSpace && !analysis?.peSpace && (
+      <div>
+        <h4 className="text-moon-mist text-body-sm font-medium mb-2">Xref</h4>
+        <XrefPanel database={xrefDatabase ?? null} offset={cursor} onJump={onFollow} />
+      </div>
+
+      {!analysis?.elfSpace && !analysis?.peSpace && analysis?.kind !== "wasm" && (
         <p className="text-caption text-fog-veil">
           PE / ELF 以外はポインタ追跡は利用できません。
         </p>

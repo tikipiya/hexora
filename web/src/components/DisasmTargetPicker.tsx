@@ -13,6 +13,7 @@ import type { BinaryAnalysis } from "../lib/binaryAnalysis";
 export interface DisasmSliceState {
   arch: Arch;
   base: number;
+  fileOffset: number;
   bytes: Uint8Array;
   label: string;
 }
@@ -52,6 +53,7 @@ export function DisasmTargetPicker({
     onChange({
       arch: t.arch,
       base: t.baseAddress,
+      fileOffset: t.fileOffset,
       bytes,
       label: `${t.label} · ${bytes.length} B @ 0x${t.fileOffset.toString(16)}`,
     });
@@ -67,6 +69,7 @@ export function DisasmTargetPicker({
     onChange({
       arch,
       base,
+      fileOffset: off,
       bytes: data.subarray(off, off + limit),
       label: `Custom @ 0x${off.toString(16)} · ${limit} B`,
     });

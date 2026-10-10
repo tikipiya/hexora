@@ -9,7 +9,11 @@ export async function disassemble(
   bytes: Uint8Array,
   maxInstructions = DISASM_DEFAULT_MAX_INSTRUCTIONS,
 ): Promise<DisasmResponse> {
-  if (arch !== "arm64" && bytes.length > 256 * 1024) {
+  if (
+    arch !== "arm64" &&
+    arch !== "wasm" &&
+    bytes.length > 256 * 1024
+  ) {
     return disassembleRemote(arch, address, bytes, maxInstructions);
   }
   return disassembleWithCapstone(arch, address, bytes, maxInstructions);

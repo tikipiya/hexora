@@ -15,6 +15,7 @@ export interface DisasmTarget {
 }
 
 export function archFromAnalysis(analysis: BinaryAnalysis): Arch | null {
+  if (analysis.wasm) return "wasm";
   if (analysis.pe) {
     const m = analysis.pe.coff.machine;
     if (m === 0x8664) return "x64";
@@ -59,6 +60,39 @@ export function listDisasmTargets(
   if (!arch) return [];
 
   const targets: DisasmTarget[] = [];
+
+  if (analysis.wasm) {
+    const wasm = analysis.wasm;
+    for (const body of wasm.codeBodies) {
+      const ex = wasm.exports.find(
+        (e) => e.kind === "function" && e.index === body.moduleFunctionIndex,
+      );
+      const im = wasm.imports.filter((i) => i.kind === "function");
+      const name =
+        ex?.name ??
+        im[body.moduleFunctionIndex]?.name ??
+        `func${body.moduleFunctionIndex}`;
+      targets.push({
+        id: `wasm-fn-${body.moduleFunctionIndex}`,
+        label: `Code: ${name}`,
+        fileOffset: body.fileOffset,
+        maxSize: body.size,
+        baseAddress: body.fileOffset,
+        arch: "wasm",
+        executable: true,
+      });
+    }
+    for (const sec of wasm.sections) {
+      targets.push({
+        id: `wasm-sec-${sec.fileOffset}`,
+        label: `Section ${sec.name}`,
+        fileOffset: sec.fileOffset,
+        maxSize: Math.min(sec.size, fileSize - sec.fileOffset),
+        baseAddress: sec.fileOffset,
+        arch: "wasm",
+      });
+    }
+  }
 
   if (analysis.pe) {
     const pe = analysis.pe;
@@ -146,14 +180,16 @@ export function listDisasmTargets(
     }
   }
 
-  targets.push({
-    id: "raw-file",
-    label: "File start (raw)",
-    fileOffset: 0,
-    maxSize: fileSize,
-    baseAddress: 0,
-    arch,
-  });
+  if (targets.length === 0 || arch !== "wasm") {
+    targets.push({
+      id: "raw-file",
+      label: "File start (raw)",
+      fileOffset: 0,
+      maxSize: fileSize,
+      baseAddress: 0,
+      arch,
+    });
+  }
 
   const seen = new Set<string>();
   return targets.filter((t) => {

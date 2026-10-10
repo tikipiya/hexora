@@ -325,6 +325,65 @@ export function BinaryStructureView({ analysis, onSelectOffset, onDisasmAt }: Pr
     );
   }
 
+  if (analysis.kind === "wasm" && analysis.wasm) {
+    const w = analysis.wasm;
+    return (
+      <div className="glass-card hairline-inset p-4 space-y-4 max-h-[70vh] overflow-auto">
+        <h3 className="font-aeonikpro text-heading-sm text-ice-highlight">
+          WebAssembly
+        </h3>
+        <HeaderGrid
+          rows={[
+            ["Version", String(w.version)],
+            ["Types", String(w.typeCount)],
+            ["Functions", String(w.functionCount)],
+            ["Imports (fn)", String(w.importFunctionCount)],
+            ["Code bodies", String(w.codeBodies.length)],
+          ]}
+        />
+        <SectionTable
+          title="Sections"
+          columns={["Name", "Id", "File", "Size"]}
+          rows={w.sections.map((s) => [
+            s.name,
+            String(s.id),
+            `0x${s.fileOffset.toString(16)}`,
+            String(s.size),
+          ])}
+          onCellClick={(row) => onSelectOffset(w.sections[row]!.fileOffset)}
+          onDisasmRow={(row) => onDisasmAt?.(w.sections[row]!.fileOffset)}
+        />
+        {w.exports.length > 0 && (
+          <SectionTable
+            title="Exports"
+            columns={["Name", "Kind", "Index"]}
+            rows={w.exports.map((e) => [e.name, e.kind, String(e.index)])}
+          />
+        )}
+        {w.codeBodies.length > 0 && (
+          <SectionTable
+            title="Code bodies"
+            columns={["Fn#", "File", "Size"]}
+            rows={w.codeBodies.map((b) => [
+              String(b.moduleFunctionIndex),
+              `0x${b.fileOffset.toString(16)}`,
+              String(b.size),
+            ])}
+            onCellClick={(row) => onSelectOffset(w.codeBodies[row]!.fileOffset)}
+            onDisasmRow={(row) => onDisasmAt?.(w.codeBodies[row]!.fileOffset)}
+          />
+        )}
+        {w.imports.length > 0 && (
+          <SectionTable
+            title="Imports"
+            columns={["Module", "Name", "Kind"]}
+            rows={w.imports.map((i) => [i.module, i.name, i.kind])}
+          />
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="glass-card hairline-inset p-4 text-fog-veil text-body-sm">
       Unknown or unsupported format — raw hex view only.

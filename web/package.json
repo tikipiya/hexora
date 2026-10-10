@@ -16,6 +16,7 @@
     "fzstd": "^0.1.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "wabt": "^1.0.39",
     "xz-decompress": "^0.2.3"
   },
   "devDependencies": {

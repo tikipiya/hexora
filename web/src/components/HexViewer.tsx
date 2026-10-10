@@ -18,6 +18,7 @@ import { HexInspector } from "./HexInspector";
 import type { HexRegion } from "../lib/hexRegions";
 import { regionAt } from "../lib/hexRegions";
 import type { BinaryAnalysis } from "../lib/binaryAnalysis";
+import type { XrefDatabase } from "@hexora/shared";
 
 const ROW_BYTES = 16;
 const ROW_HEIGHT = 24;
@@ -29,6 +30,7 @@ interface Props {
   focusRange?: { start: number; end: number };
   regions?: HexRegion[];
   analysis?: BinaryAnalysis | null;
+  xrefDatabase?: XrefDatabase | null;
   onJump?: (offset: number) => void;
   onSelectionRangeChange?: (range: { start: number; end: number } | null) => void;
   /** Diff タブで選んだ比較ファイル（同じオフセットで色付け） */
@@ -41,6 +43,7 @@ export function HexViewer({
   focusRange,
   regions = [],
   analysis = null,
+  xrefDatabase = null,
   onJump,
   onSelectionRangeChange,
   diffPeer = null,
@@ -287,6 +290,7 @@ export function HexViewer({
       cursor={Math.min(cursor, data.length - 1)}
       selection={selectionRange}
       analysis={analysis}
+      xrefDatabase={xrefDatabase}
       onFollow={follow}
     />
     </div>

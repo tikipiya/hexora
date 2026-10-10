@@ -1,6 +1,6 @@
 # Hexora
 
-ブラウザ内バイナリ解析（PE / ELF / Mach-O）— Cloudflare Pages + Pages Functions。
+ブラウザ内バイナリ解析（PE / ELF / Mach-O / **WebAssembly**）— Cloudflare Pages + Pages Functions。
 
 ## 機能
 
@@ -15,7 +15,8 @@
 - **ファイル読み込み** — ストリーム読み込み・読み込み中ハッシュ・進捗・キャンセル
 - **Hex** — 仮想スクロール・Inspector（整数/浮動小数/ポインタ追跡）・構造体配列ビュー
 - **Strings** — 1 MiB 超は **Web Worker**、進捗付きスキャン、マルチエンコーディング
-- **Disasm** — **Capstone WASM**（x86 / x64 / **ARM64**）、セクション／オフセット選択（大きいバッファは Worker）
+- **Disasm** — **Capstone WASM**（x86 / x64 / **ARM64** / **Wasm bytecode**）、セクション／関数ボディ選択；`.wasm` は **wabt** で WAT 表示
+- **Xref** — import/export/reloc/symbol と Disasm 上の call/jump 参照（Hex Inspector）
 - **Structure** — PE リソース・リロック、ELF dynamic/rel、Mach-O セグメント
 - **Transform** — XOR、Encoding、Compression（gzip/zlib/zip/**bzip2**/**zstd**/**xz** 展開）、カービング — 512 KiB 超は Worker
 - **Workers API** — 上記に加え `POST /api/transform/scan`（ヒューリスティックスキャン、base64・最大 4 MiB 既定）

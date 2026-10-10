@@ -1,10 +1,11 @@
 import { BinaryReader } from "./reader.ts";
 
-export type BinaryKind = "elf" | "pe" | "macho" | "unknown";
+export type BinaryKind = "elf" | "pe" | "macho" | "wasm" | "unknown";
 
 export function detectBinaryKind(buffer: ArrayBuffer | Uint8Array): BinaryKind {
   const r = new BinaryReader(buffer);
   if (r.length < 4) return "unknown";
+  if (r.matchAt(0, [0x00, 0x61, 0x73, 0x6d])) return "wasm";
   if (r.matchAt(0, [0x7f, 0x45, 0x4c, 0x46])) return "elf";
   const m = r.readU32(0);
   if (m === 0xfeedface || m === 0xfeedfacf) return "macho";

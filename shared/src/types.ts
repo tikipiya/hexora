@@ -1,4 +1,6 @@
-export type Arch = "x86" | "x64" | "arm64";
+export type Arch = "x86" | "x64" | "arm64" | "wasm";
+
+export type DisasmTargetKind = "call" | "jump" | "data";
 
 export interface DisasmRequest {
   arch: Arch;
@@ -13,6 +15,7 @@ export interface DisasmInstruction {
   mnemonic: string;
   operands: string;
   bytes: string;
+  targets?: { address: number; kind: DisasmTargetKind }[];
 }
 
 export interface DisasmResponse {

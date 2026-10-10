@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { DisasmInstruction } from "@hexora/shared";
 import { Background } from "./components/Background";
 import { AddressConverter } from "./components/AddressConverter";
 import { AnalysisWarnings } from "./components/AnalysisWarnings";
@@ -22,6 +23,8 @@ import { loadFromBytes } from "./lib/loadBytes";
 import { DiffPanel } from "./components/DiffPanel";
 import { copyText } from "./lib/clipboard";
 import { parseUrlHash, writeUrlHash, type ShareableTab } from "./lib/urlState";
+import { useXrefDatabase } from "./hooks/useXrefDatabase";
+import { WasmWatPanel } from "./components/WasmWatPanel";
 
 type Tab = ShareableTab;
 
@@ -42,6 +45,9 @@ export function App() {
   const [stringDedupe, setStringDedupe] = useState(DEFAULT_STRING_OPTIONS.dedupe);
   const [disasmSlice, setDisasmSlice] = useState<DisasmSliceState | null>(null);
   const [disasmJumpOffset, setDisasmJumpOffset] = useState<number | undefined>();
+  const [disasmInstructions, setDisasmInstructions] = useState<DisasmInstruction[]>(
+    [],
+  );
   const [hexSelection, setHexSelection] = useState<{ start: number; end: number } | null>(
     null,
   );
@@ -97,6 +103,7 @@ export function App() {
       setTransformScope("full");
       setDisasmSlice(null);
       setDisasmJumpOffset(undefined);
+      setDisasmInstructions([]);
     } finally {
       setLoadBusy(false);
     }
@@ -107,11 +114,24 @@ export function App() {
     [analysis],
   );
 
+  const disasmXref = useMemo(() => {
+    if (!disasmSlice || disasmInstructions.length === 0) return null;
+    return {
+      instructions: disasmInstructions,
+      fileOffset: disasmSlice.fileOffset,
+      baseAddress: disasmSlice.base,
+      arch: disasmSlice.arch,
+    };
+  }, [disasmSlice, disasmInstructions]);
+
+  const xrefDatabase = useXrefDatabase(analysis, data, disasmXref);
+
   const formatLabel = useMemo(() => {
     if (!analysis) return "Raw";
     if (analysis.kind === "pe") return analysis.pe?.isPe32Plus ? "PE32+" : "PE32";
     if (analysis.kind === "elf") return `ELF${analysis.elf?.header.class ?? ""}`;
     if (analysis.kind === "macho") return `Mach-O ${analysis.macho?.cpuName ?? ""}`;
+    if (analysis.kind === "wasm") return "WebAssembly";
     return "Unknown";
   }, [analysis]);
 
@@ -145,6 +165,7 @@ export function App() {
 
       setDisasmSlice(null);
       setDisasmJumpOffset(undefined);
+      setDisasmInstructions([]);
       setTab(hash.tab ?? "overview");
       setJumpOffset(hash.off);
       setHexFocus(null);
@@ -159,6 +180,7 @@ export function App() {
     setHashes(null);
     setAnalysis(null);
     setDisasmSlice(null);
+    setDisasmInstructions([]);
     setWarnedLarge(false);
     setLoadError(null);
     setJumpOffset(undefined);
@@ -290,7 +312,8 @@ export function App() {
                 focusRange={hexFocus ?? undefined}
                 regions={hexRegions}
                 analysis={analysis}
-                onJump={(o) => setJumpOffset(o)}
+                xrefDatabase={xrefDatabase}
+                onJump={(o) => jumpTo(o)}
                 onSelectionRangeChange={setHexSelection}
                 diffPeer={diffOverlay ? diffPeer : null}
               />
@@ -317,6 +340,7 @@ export function App() {
 
             {tab === "disasm" && (
               <div className="space-y-4">
+                {analysis?.kind === "wasm" && data && <WasmWatPanel data={data} />}
                 <DisasmTargetPicker
                   fileKey={fileName}
                   data={data}
@@ -331,6 +355,8 @@ export function App() {
                     baseAddress={disasmSlice.base}
                     bytes={disasmSlice.bytes}
                     label={disasmSlice.label}
+                    onJump={(o) => jumpTo(o)}
+                    onInstructions={setDisasmInstructions}
                   />
                 ) : (
                   <DisasmPanel

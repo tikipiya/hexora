@@ -3,6 +3,7 @@ export type {
   DisasmRequest,
   DisasmInstruction,
   DisasmResponse,
+  DisasmTargetKind,
 } from "./types.ts";
 export {
   DISASM_MAX_BYTES,
@@ -46,3 +47,14 @@ export {
 } from "./api/http.ts";
 
 export * from "./transform/index.ts";
+
+export { parseWasm } from "./wasm/index.ts";
+export type {
+  WasmCodeBody,
+  WasmExport,
+  WasmImport,
+  WasmParseResult,
+  WasmSection,
+} from "./wasm/index.ts";
+
+export * from "./xref/index.ts";

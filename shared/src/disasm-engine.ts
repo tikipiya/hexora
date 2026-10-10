@@ -31,6 +31,7 @@ interface DecodedInsn {
 }
 
 function decodeOne(arch: Arch, bytes: Uint8Array, ip: number): DecodedInsn | null {
+  if (arch === "wasm") return null;
   if (ip >= bytes.length) return null;
   const b0 = bytes[ip];
 

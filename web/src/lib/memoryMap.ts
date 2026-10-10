@@ -64,6 +64,13 @@ export function regionsFromAnalysis(analysis: BinaryAnalysis): HexRegion[] {
         label: s.name,
       }));
   }
+  if (analysis.wasm?.sections) {
+    return analysis.wasm.sections.map((s) => ({
+      start: s.fileOffset,
+      end: s.fileOffset + s.size,
+      label: `wasm:${s.name}`,
+    }));
+  }
   return [];
 }
 

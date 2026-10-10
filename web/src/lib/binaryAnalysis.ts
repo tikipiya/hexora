@@ -5,10 +5,12 @@ import {
   parseElf,
   parsePe,
   parseMachO,
+  parseWasm,
   type ElfParseResult,
   type MachOParseResult,
   type ParseIssue,
   type PeParseResult,
+  type WasmParseResult,
   type ElfAddressSpace,
   type PeAddressSpace,
 } from "@hexora/shared";
@@ -16,10 +18,11 @@ import {
 export type ParseMode = "strict" | "lenient";
 
 export interface BinaryAnalysis {
-  kind: "elf" | "pe" | "macho" | "unknown";
+  kind: "elf" | "pe" | "macho" | "wasm" | "unknown";
   elf: ElfParseResult | null;
   pe: PeParseResult | null;
   macho: MachOParseResult | null;
+  wasm: WasmParseResult | null;
   elfSpace: ElfAddressSpace | null;
   peSpace: PeAddressSpace | null;
   issues: ParseIssue[];
@@ -38,6 +41,7 @@ export function analyzeBinary(
         elf,
         pe: null,
         macho: null,
+        wasm: null,
         elfSpace: buildElfAddressSpace(
           elf.programHeaders,
           elf.sectionHeaders,
@@ -52,6 +56,7 @@ export function analyzeBinary(
         elf: null,
         pe: null,
         macho: null,
+        wasm: null,
         elfSpace: null,
         peSpace: null,
         issues: [
@@ -72,6 +77,7 @@ export function analyzeBinary(
         elf: null,
         pe,
         macho: null,
+        wasm: null,
         elfSpace: null,
         peSpace: buildPeAddressSpace(
           pe.imageBase,
@@ -87,6 +93,7 @@ export function analyzeBinary(
         elf: null,
         pe: null,
         macho: null,
+        wasm: null,
         elfSpace: null,
         peSpace: null,
         issues: [
@@ -107,6 +114,7 @@ export function analyzeBinary(
         elf: null,
         pe: null,
         macho,
+        wasm: null,
         elfSpace: null,
         peSpace: null,
         issues: macho.issues,
@@ -117,6 +125,7 @@ export function analyzeBinary(
         elf: null,
         pe: null,
         macho: null,
+        wasm: null,
         elfSpace: null,
         peSpace: null,
         issues: [
@@ -129,11 +138,44 @@ export function analyzeBinary(
       };
     }
   }
+  if (kind === "wasm") {
+    try {
+      const wasm = parseWasm(buffer, mode);
+      return {
+        kind: "wasm",
+        elf: null,
+        pe: null,
+        macho: null,
+        wasm,
+        elfSpace: null,
+        peSpace: null,
+        issues: wasm.issues,
+      };
+    } catch (e) {
+      return {
+        kind: "unknown",
+        elf: null,
+        pe: null,
+        macho: null,
+        wasm: null,
+        elfSpace: null,
+        peSpace: null,
+        issues: [
+          {
+            severity: "error",
+            code: "wasm_fatal",
+            message: e instanceof Error ? e.message : "Wasm parse failed",
+          },
+        ],
+      };
+    }
+  }
   return {
     kind: "unknown",
     elf: null,
     pe: null,
     macho: null,
+    wasm: null,
     elfSpace: null,
     peSpace: null,
     issues: [],
