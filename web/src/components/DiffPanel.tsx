@@ -2,12 +2,23 @@ import { useRef, useState } from "react";
 import { compareBinary, type DiffSummary } from "../lib/binaryDiff";
 import { loadFile } from "../lib/fileLoad";
 
+interface OpenFileOption {
+  id: string;
+  name: string;
+  data: Uint8Array;
+}
+
 interface Props {
   primary: Uint8Array;
   primaryName: string;
   onJump: (offset: number) => void;
   overlayEnabled: boolean;
   onOverlayChange: (enabled: boolean, secondary: Uint8Array | null) => void;
+  /** ワークスペース内の他タブから比較先を選ぶ */
+  openFiles?: OpenFileOption[];
+  selectedOpenId?: string | null;
+  onSelectOpenFile?: (id: string | null) => void;
+  onExternalPeer?: (bytes: Uint8Array, name: string) => void;
 }
 
 export function DiffPanel({
@@ -16,6 +27,10 @@ export function DiffPanel({
   onJump,
   overlayEnabled,
   onOverlayChange,
+  openFiles = [],
+  selectedOpenId,
+  onSelectOpenFile,
+  onExternalPeer,
 }: Props) {
   const [secondary, setSecondary] = useState<Uint8Array | null>(null);
   const [secondaryName, setSecondaryName] = useState<string | null>(null);
@@ -34,6 +49,7 @@ export function DiffPanel({
       setSecondary(loaded.bytes);
       setSecondaryName(loaded.file.name);
       runCompare(loaded.bytes);
+      onExternalPeer?.(loaded.bytes, loaded.file.name);
       onOverlayChange(overlayEnabled, loaded.bytes);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Load failed");
@@ -64,7 +80,31 @@ export function DiffPanel({
             if (f) void onPick(f);
           }}
         />
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 items-center">
+          {openFiles.length > 0 && onSelectOpenFile && (
+            <select
+              className="rounded-[var(--radius-buttons)] px-3 py-2 text-body-sm hairline-inset text-frost-glow bg-transparent"
+              value={selectedOpenId ?? ""}
+              onChange={(e) => {
+                const id = e.target.value || null;
+                onSelectOpenFile(id);
+                const pick = openFiles.find((f) => f.id === id);
+                if (pick) {
+                  setSecondary(pick.data);
+                  setSecondaryName(pick.name);
+                  runCompare(pick.data);
+                  onOverlayChange(overlayEnabled, pick.data);
+                }
+              }}
+            >
+              <option value="">開いているファイルから…</option>
+              {openFiles.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.name}
+                </option>
+              ))}
+            </select>
+          )}
           <button
             type="button"
             className="rounded-[var(--radius-buttons)] px-4 py-2 text-body-sm hairline-inset text-frost-glow"

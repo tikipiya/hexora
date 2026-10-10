@@ -58,3 +58,5 @@ export type {
 } from "./wasm/index.ts";
 
 export * from "./xref/index.ts";
+
+export * from "./cfg/index.ts";

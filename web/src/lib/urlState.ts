@@ -3,9 +3,11 @@ export type ShareableTab =
   | "hex"
   | "strings"
   | "disasm"
+  | "cfg"
   | "structure"
   | "transform"
-  | "diff";
+  | "diff"
+  | "workspace";
 
 export interface UrlViewState {
   tab?: ShareableTab;

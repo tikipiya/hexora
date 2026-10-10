@@ -1,59 +1,88 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type { DisasmInstruction } from "@hexora/shared";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { buildCfgFromDisasm } from "@hexora/shared";
 import { Background } from "./components/Background";
 import { AddressConverter } from "./components/AddressConverter";
 import { AnalysisWarnings } from "./components/AnalysisWarnings";
 import { BinaryStructureView } from "./components/BinaryStructureView";
+import { CfgPanel } from "./components/CfgPanel";
 import { DisasmPanel } from "./components/DisasmPanel";
-import { DisasmTargetPicker, type DisasmSliceState } from "./components/DisasmTargetPicker";
+import { DisasmTargetPicker } from "./components/DisasmTargetPicker";
 import { EntropyMap } from "./components/EntropyMap";
 import { Eyebrow } from "./components/Eyebrow";
 import { FileDropzone, FileMeta } from "./components/FileDropzone";
+import { FileTabs } from "./components/FileTabs";
 import { HashPanel } from "./components/HashPanel";
 import { HexViewer } from "./components/HexViewer";
 import { StringsPanel } from "./components/StringsPanel";
 import { TransformPanel, type TransformScopeMode } from "./components/TransformPanel";
+import { WorkspacePanel } from "./components/WorkspacePanel";
 import { useExtractedStrings } from "./hooks/useExtractedStrings";
 import { useTransformScan } from "./hooks/useTransformScan";
-import { analyzeBinary, type BinaryAnalysis } from "./lib/binaryAnalysis";
+import { useWorkspace } from "./hooks/useWorkspace";
+import { useXrefDatabase } from "./hooks/useXrefDatabase";
 import type { LoadedFile } from "./lib/fileLoad";
+import { loadFile } from "./lib/fileLoad";
 import { regionsFromAnalysis } from "./lib/memoryMap";
 import { DEFAULT_STRING_OPTIONS } from "./lib/strings";
-import { loadFromBytes } from "./lib/loadBytes";
 import { DiffPanel } from "./components/DiffPanel";
 import { copyText } from "./lib/clipboard";
 import { parseUrlHash, writeUrlHash, type ShareableTab } from "./lib/urlState";
-import { useXrefDatabase } from "./hooks/useXrefDatabase";
 import { WasmWatPanel } from "./components/WasmWatPanel";
+import { base64ToUint8, uint8ToBase64 } from "./lib/base64";
 
 type Tab = ShareableTab;
 
 export function App() {
-  const [fileName, setFileName] = useState<string | null>(null);
-  const [data, setData] = useState<Uint8Array | null>(null);
-  const [analysis, setAnalysis] = useState<BinaryAnalysis | null>(null);
-  const [warnedLarge, setWarnedLarge] = useState(false);
-  const [hashes, setHashes] = useState<LoadedFile["hashes"] | null>(null);
+  const ws = useWorkspace();
+  const active = ws.active;
+  const data = active?.data ?? null;
+  const fileName = active?.fileName ?? null;
+  const analysis = active?.analysis ?? null;
+  const hashes = active?.hashes ?? null;
+  const warnedLarge = active?.warnedLarge ?? false;
+  const ui = active?.ui;
+
   const [loadBusy, setLoadBusy] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("overview");
-  const [jumpOffset, setJumpOffset] = useState<number | undefined>();
-  const [hexFocus, setHexFocus] = useState<{ start: number; end: number } | null>(
-    null,
-  );
-  const [stringMinLen, setStringMinLen] = useState(DEFAULT_STRING_OPTIONS.minLength);
-  const [stringDedupe, setStringDedupe] = useState(DEFAULT_STRING_OPTIONS.dedupe);
-  const [disasmSlice, setDisasmSlice] = useState<DisasmSliceState | null>(null);
-  const [disasmJumpOffset, setDisasmJumpOffset] = useState<number | undefined>();
-  const [disasmInstructions, setDisasmInstructions] = useState<DisasmInstruction[]>(
-    [],
-  );
-  const [hexSelection, setHexSelection] = useState<{ start: number; end: number } | null>(
-    null,
-  );
-  const [transformScope, setTransformScope] = useState<TransformScopeMode>("full");
-  const [diffPeer, setDiffPeer] = useState<Uint8Array | null>(null);
-  const [diffOverlay, setDiffOverlay] = useState(false);
+  const addFileRef = useRef<HTMLInputElement>(null);
+
+  const tab = ui?.tab ?? "overview";
+  const setTab = (t: Tab) => ws.updateActiveUi({ tab: t });
+  const jumpOffset = ui?.jumpOffset;
+  const setJumpOffset = (o: number | undefined) => ws.updateActiveUi({ jumpOffset: o });
+  const hexFocus = ui?.hexFocus ?? null;
+  const setHexFocus = (r: { start: number; end: number } | null) =>
+    ws.updateActiveUi({ hexFocus: r });
+  const hexSelection = ui?.hexSelection ?? null;
+  const setHexSelection = (r: { start: number; end: number } | null) =>
+    ws.updateActiveUi({ hexSelection: r });
+  const disasmSlice = ui?.disasmSlice ?? null;
+  const setDisasmSlice = (s: typeof disasmSlice) => ws.updateActiveUi({ disasmSlice: s });
+  const disasmJumpOffset = ui?.disasmJumpOffset;
+  const setDisasmJumpOffset = (o: number | undefined) =>
+    ws.updateActiveUi({ disasmJumpOffset: o });
+  const disasmInstructions = ui?.disasmInstructions ?? [];
+  const setDisasmInstructions = (items: typeof disasmInstructions) =>
+    ws.updateActiveUi({ disasmInstructions: items });
+  const stringMinLen = ui?.stringMinLen ?? DEFAULT_STRING_OPTIONS.minLength;
+  const setStringMinLen = (n: number) => ws.updateActiveUi({ stringMinLen: n });
+  const stringDedupe = ui?.stringDedupe ?? DEFAULT_STRING_OPTIONS.dedupe;
+  const setStringDedupe = (d: boolean) => ws.updateActiveUi({ stringDedupe: d });
+  const transformScope = ui?.transformScope ?? "full";
+  const setTransformScope = (m: TransformScopeMode) =>
+    ws.updateActiveUi({ transformScope: m });
+  const diffOverlay = ui?.diffOverlay ?? false;
+  const diffPeerId = ui?.diffPeerId ?? null;
+
+  const diffPeer = useMemo(() => {
+    if (diffPeerId) {
+      return ws.sessions.find((s) => s.id === diffPeerId)?.data ?? null;
+    }
+    if (ui?.diffPeerBase64) {
+      return base64ToUint8(ui.diffPeerBase64);
+    }
+    return null;
+  }, [diffPeerId, ui?.diffPeerBase64, ws.sessions]);
 
   const stringOptions = useMemo(
     () => ({
@@ -87,28 +116,6 @@ export function App() {
     usedWorker: transformUsedWorker,
   } = useTransformScan(data, transformRange);
 
-  const ingestBytes = useCallback(async (bytes: Uint8Array, name: string) => {
-    setLoadBusy(true);
-    try {
-      const loaded = await loadFromBytes(name, bytes);
-      setFileName(loaded.fileName);
-      setData(loaded.data);
-      setAnalysis(loaded.analysis);
-      setHashes(loaded.hashes);
-      setWarnedLarge(loaded.warnedLarge);
-      setTab("overview");
-      setJumpOffset(undefined);
-      setHexFocus(null);
-      setHexSelection(null);
-      setTransformScope("full");
-      setDisasmSlice(null);
-      setDisasmJumpOffset(undefined);
-      setDisasmInstructions([]);
-    } finally {
-      setLoadBusy(false);
-    }
-  }, []);
-
   const hexRegions = useMemo(
     () => (analysis ? regionsFromAnalysis(analysis) : []),
     [analysis],
@@ -125,6 +132,16 @@ export function App() {
   }, [disasmSlice, disasmInstructions]);
 
   const xrefDatabase = useXrefDatabase(analysis, data, disasmXref);
+
+  const cfgGraph = useMemo(() => {
+    if (!disasmSlice || disasmInstructions.length === 0) return null;
+    return buildCfgFromDisasm(
+      disasmInstructions,
+      disasmSlice.fileOffset,
+      disasmSlice.base,
+      disasmSlice.arch,
+    );
+  }, [disasmSlice, disasmInstructions]);
 
   const formatLabel = useMemo(() => {
     if (!analysis) return "Raw";
@@ -150,44 +167,53 @@ export function App() {
     setTab("hex");
   };
 
-  const onLoaded = useCallback(async (loaded: LoadedFile) => {
-    setLoadError(null);
+  const onLoaded = useCallback(
+    async (loaded: LoadedFile) => {
+      setLoadError(null);
+      setLoadBusy(true);
+      const hash = parseUrlHash(window.location.hash);
+      try {
+        await ws.openLoaded(loaded, {
+          tab: hash.tab ?? "overview",
+          jumpOffset: hash.off,
+          hexFocus: null,
+        });
+      } finally {
+        setLoadBusy(false);
+      }
+    },
+    [ws],
+  );
+
+  const onAddFile = async (file: File) => {
     setLoadBusy(true);
-    setFileName(loaded.file.name);
-    setData(loaded.bytes);
-    setWarnedLarge(loaded.warnedLarge);
-    setHashes(loaded.hashes);
-    const hash = parseUrlHash(window.location.hash);
-
     try {
-      const a = analyzeBinary(loaded.buffer, "lenient");
-      setAnalysis(a);
-
-      setDisasmSlice(null);
-      setDisasmJumpOffset(undefined);
-      setDisasmInstructions([]);
-      setTab(hash.tab ?? "overview");
-      setJumpOffset(hash.off);
-      setHexFocus(null);
+      const loaded = await loadFile(file);
+      await ws.openLoaded(loaded, { tab: "overview" });
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "Load failed");
     } finally {
       setLoadBusy(false);
     }
-  }, []);
-
-  const clearFile = () => {
-    setData(null);
-    setFileName(null);
-    setHashes(null);
-    setAnalysis(null);
-    setDisasmSlice(null);
-    setDisasmInstructions([]);
-    setWarnedLarge(false);
-    setLoadError(null);
-    setJumpOffset(undefined);
-    setHexFocus(null);
   };
 
+  const ingestBytes = useCallback(
+    async (bytes: Uint8Array, name: string) => {
+      setLoadBusy(true);
+      try {
+        await ws.openBytes(name, bytes);
+      } finally {
+        setLoadBusy(false);
+      }
+    },
+    [ws],
+  );
+
   const allIssues = analysis?.issues ?? [];
+
+  const diffOpenFiles = ws.sessions
+    .filter((s) => s.id !== active?.id)
+    .map((s) => ({ id: s.id, name: s.fileName, data: s.data }));
 
   return (
     <div className="relative min-h-screen">
@@ -225,11 +251,11 @@ export function App() {
             Hexora
           </h1>
           <p className="text-moon-mist text-body max-w-[640px] mx-auto">
-            CTF 向けバイナリ解析 — ブラウザ内パース + 必要時のみ Workers（ディスアセンブリ / API 検証）。
+            CTF 向けバイナリ解析 — マルチファイル・CFG・セッション保存対応。
           </p>
         </section>
 
-        {!data && (
+        {ws.sessions.length === 0 && (
           <>
             {loadError && (
               <p className="text-center text-ember-glow text-body-sm mb-4">{loadError}</p>
@@ -238,8 +264,25 @@ export function App() {
           </>
         )}
 
-        {data && fileName && analysis && (
+        {active && data && fileName && analysis && (
           <div className="space-y-6">
+            <FileTabs
+              sessions={ws.sessions}
+              activeId={ws.activeId}
+              onSelect={ws.setActiveId}
+              onClose={ws.closeSession}
+              onAdd={() => addFileRef.current?.click()}
+            />
+            <input
+              ref={addFileRef}
+              type="file"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void onAddFile(f);
+              }}
+            />
+
             <div className="flex flex-wrap items-center justify-between gap-4">
               <FileMeta
                 name={fileName}
@@ -251,9 +294,9 @@ export function App() {
                 type="button"
                 disabled={loadBusy}
                 className="rounded-[var(--radius-buttons)] px-4 py-2 text-body-sm bg-void-violet text-pure-white font-medium disabled:opacity-50"
-                onClick={clearFile}
+                onClick={() => ws.clearAll()}
               >
-                別のファイル
+                ワークスペースを閉じる
               </button>
             </div>
 
@@ -268,8 +311,10 @@ export function App() {
                   ["hex", "Hex"],
                   ["strings", "Strings"],
                   ["disasm", "Disasm"],
+                  ["cfg", "CFG"],
                   ["transform", "Transform"],
                   ["diff", "Diff"],
+                  ["workspace", "Workspace"],
                 ] as const
               ).map(([id, label]) => (
                 <button
@@ -342,7 +387,7 @@ export function App() {
               <div className="space-y-4">
                 {analysis?.kind === "wasm" && data && <WasmWatPanel data={data} />}
                 <DisasmTargetPicker
-                  fileKey={fileName}
+                  fileKey={`${active.id}:${fileName}`}
                   data={data}
                   analysis={analysis}
                   value={disasmSlice}
@@ -369,16 +414,39 @@ export function App() {
               </div>
             )}
 
+            {tab === "cfg" && (
+              <CfgPanel
+                graph={cfgGraph}
+                label={disasmSlice?.label ?? "—"}
+                onSelectOffset={(o) => jumpTo(o)}
+              />
+            )}
+
             {tab === "diff" && fileName && (
               <DiffPanel
                 primary={data}
                 primaryName={fileName}
                 onJump={jumpTo}
                 overlayEnabled={diffOverlay}
-                onOverlayChange={(on, sec) => {
-                  setDiffOverlay(on);
-                  setDiffPeer(sec);
-                  if (on) setTab("hex");
+                onOverlayChange={(on) => {
+                  ws.updateActiveUi({ diffOverlay: on });
+                }}
+                onExternalPeer={(bytes, name) => {
+                  const max = 4 * 1024 * 1024;
+                  ws.updateActiveUi({
+                    diffPeerId: null,
+                    diffPeerName: name,
+                    diffPeerBase64: bytes.length <= max ? uint8ToBase64(bytes) : null,
+                  });
+                }}
+                openFiles={diffOpenFiles}
+                selectedOpenId={diffPeerId}
+                onSelectOpenFile={(id) => {
+                  ws.updateActiveUi({
+                    diffPeerId: id,
+                    diffPeerBase64: null,
+                    diffPeerName: null,
+                  });
                 }}
               />
             )}
@@ -398,6 +466,21 @@ export function App() {
                 onReanalyze={(bytes, suggested) =>
                   void ingestBytes(bytes, `${suggested}.bin`)
                 }
+              />
+            )}
+
+            {tab === "workspace" && (
+              <WorkspacePanel
+                sessions={ws.sessions}
+                active={active}
+                storageBusy={ws.storageBusy}
+                onSaveActive={() => void ws.saveActive()}
+                onSaveAll={() => void ws.saveAll()}
+                onRestore={(id) => void ws.restoreFromDb(id)}
+                onDeleteStored={(id) => void ws.removeFromDb(id)}
+                listStored={ws.listDb}
+                onImportSessions={ws.importSessions}
+                onNotesChange={(notes) => ws.updateActiveUi({ notes })}
               />
             )}
           </div>

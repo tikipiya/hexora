@@ -17,6 +17,9 @@
 - **Strings** — 1 MiB 超は **Web Worker**、進捗付きスキャン、マルチエンコーディング
 - **Disasm** — **Capstone WASM**（x86 / x64 / **ARM64** / **Wasm bytecode**）、セクション／関数ボディ選択；`.wasm` は **wabt** で WAT 表示
 - **Xref** — import/export/reloc/symbol と Disasm 上の call/jump 参照（Hex Inspector）
+- **CFG** — Disasm スライスから基本ブロックグラフ（SVG・Hex ジャンプ）
+- **マルチファイル** — タブで複数バイナリを同時に開く、Diff で開いているファイル同士を比較
+- **ワークスペース** — IndexedDB 保存・JSON エクスポート/インポート（バイト + UI 状態・メモ）
 - **Structure** — PE リソース・リロック、ELF dynamic/rel、Mach-O セグメント
 - **Transform** — XOR、Encoding、Compression（gzip/zlib/zip/**bzip2**/**zstd**/**xz** 展開）、カービング — 512 KiB 超は Worker
 - **Workers API** — 上記に加え `POST /api/transform/scan`（ヒューリスティックスキャン、base64・最大 4 MiB 既定）
