@@ -93,7 +93,7 @@ export function App() {
           Hexora
         </span>
         <a
-          href="https://github.com"
+          href="https://github.com/tikipiya/hexora"
           className="rounded-[var(--radius-buttons)] px-4 py-2 text-body-sm text-frost-glow hairline-inset hover:bg-[rgba(186,214,247,0.06)]"
         >
           GitHub
