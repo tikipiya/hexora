@@ -30,6 +30,7 @@ interface Props {
   regions?: HexRegion[];
   analysis?: BinaryAnalysis | null;
   onJump?: (offset: number) => void;
+  onSelectionRangeChange?: (range: { start: number; end: number } | null) => void;
 }
 
 export function HexViewer({
@@ -39,6 +40,7 @@ export function HexViewer({
   regions = [],
   analysis = null,
   onJump,
+  onSelectionRangeChange,
 }: Props) {
   const [search, setSearch] = useState("");
   const [matchIndex, setMatchIndex] = useState(0);
@@ -137,6 +139,10 @@ export function HexViewer({
     const b = Math.max(selStart, selEnd);
     return { start: a, end: b };
   }, [selStart, selEnd]);
+
+  useEffect(() => {
+    onSelectionRangeChange?.(selectionRange);
+  }, [selectionRange, onSelectionRangeChange]);
 
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === "Enter" && goto.trim()) {

@@ -4,24 +4,36 @@ import { tryDecodeAt, xorWithKey } from "@hexora/shared";
 import { tryDecompress } from "../lib/decompress";
 import type { TransformScanResult } from "../hooks/useTransformScan";
 
+export type TransformScopeMode = "full" | "selection";
+
 interface Props {
   data: Uint8Array;
+  workData: Uint8Array;
+  scopeMode: TransformScopeMode;
+  onScopeModeChange: (mode: TransformScopeMode) => void;
+  hexSelection: { start: number; end: number } | null;
   result: TransformScanResult | null;
   scanning: boolean;
   progress: { phase: string; percent: number } | null;
   usedWorker: boolean;
   onJump: (offset: number, length?: number) => void;
+  onReanalyze: (bytes: Uint8Array, suggestedName: string) => void;
 }
 
 type SubTab = "xor" | "encoding" | "compression" | "carving";
 
 export function TransformPanel({
   data,
+  workData,
+  scopeMode,
+  onScopeModeChange,
+  hexSelection,
   result,
   scanning,
   progress,
   usedWorker,
   onJump,
+  onReanalyze,
 }: Props) {
   const [sub, setSub] = useState<SubTab>("xor");
   const [preview, setPreview] = useState<{
@@ -31,7 +43,7 @@ export function TransformPanel({
   const [customKey, setCustomKey] = useState("");
 
   const applyXor = (c: XorCandidate) => {
-    const decoded = xorWithKey(data, c.key);
+    const decoded = xorWithKey(workData, c.key);
     setPreview({ title: `XOR key ${c.keyHex}`, bytes: decoded });
   };
 
@@ -43,7 +55,7 @@ export function TransformPanel({
     if (key.length === 0) return;
     setPreview({
       title: `XOR key ${[...key].map((b) => b.toString(16).padStart(2, "0")).join(" ")}`,
-      bytes: xorWithKey(data, key),
+      bytes: xorWithKey(workData, key),
     });
   };
 
@@ -104,13 +116,37 @@ export function TransformPanel({
             </button>
           ))}
         </nav>
-        <span className="text-caption text-fog-veil">
-          {scanning
-            ? `Scanning ${progress?.phase ?? ""} ${progress?.percent ?? 0}%${usedWorker ? " · Worker" : ""}`
-            : result
-              ? "Scan complete"
-              : "Waiting…"}
-        </span>
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-caption text-fog-veil flex gap-2">
+            <label className="inline-flex items-center gap-1">
+              <input
+                type="radio"
+                checked={scopeMode === "full"}
+                onChange={() => onScopeModeChange("full")}
+              />
+              Full file
+            </label>
+            <label className="inline-flex items-center gap-1">
+              <input
+                type="radio"
+                checked={scopeMode === "selection"}
+                disabled={!hexSelection}
+                onChange={() => onScopeModeChange("selection")}
+              />
+              Hex selection
+              {hexSelection && scopeMode === "selection"
+                ? ` (${hexSelection.end - hexSelection.start + 1} B)`
+                : ""}
+            </label>
+          </span>
+          <span className="text-caption text-fog-veil">
+            {scanning
+              ? `Scanning ${progress?.phase ?? ""} ${progress?.percent ?? 0}%${usedWorker ? " · Worker" : ""}`
+              : result
+                ? "Scan complete"
+                : "Waiting…"}
+          </span>
+        </div>
       </div>
 
       {sub === "xor" && (
@@ -230,6 +266,16 @@ export function TransformPanel({
                 onClick={downloadPreview}
               >
                 Download
+              </button>
+              <button
+                type="button"
+                disabled={!preview.bytes.length}
+                className="text-caption hairline-inset px-2 py-1 rounded text-blueprint-blue"
+                onClick={() =>
+                  onReanalyze(preview.bytes, preview.title.replace(/\s+/g, "_").slice(0, 48))
+                }
+              >
+                Open as file
               </button>
             </div>
           </div>

@@ -11,13 +11,14 @@ import { FileDropzone, FileMeta } from "./components/FileDropzone";
 import { HashPanel } from "./components/HashPanel";
 import { HexViewer } from "./components/HexViewer";
 import { StringsPanel } from "./components/StringsPanel";
-import { TransformPanel } from "./components/TransformPanel";
+import { TransformPanel, type TransformScopeMode } from "./components/TransformPanel";
 import { useExtractedStrings } from "./hooks/useExtractedStrings";
 import { useTransformScan } from "./hooks/useTransformScan";
 import { analyzeBinary, type BinaryAnalysis } from "./lib/binaryAnalysis";
 import type { LoadedFile } from "./lib/fileLoad";
 import { regionsFromAnalysis } from "./lib/memoryMap";
 import { DEFAULT_STRING_OPTIONS } from "./lib/strings";
+import { loadFromBytes } from "./lib/loadBytes";
 
 type Tab = "overview" | "hex" | "strings" | "disasm" | "structure" | "transform";
 
@@ -38,6 +39,10 @@ export function App() {
   const [stringDedupe, setStringDedupe] = useState(DEFAULT_STRING_OPTIONS.dedupe);
   const [disasmSlice, setDisasmSlice] = useState<DisasmSliceState | null>(null);
   const [disasmJumpOffset, setDisasmJumpOffset] = useState<number | undefined>();
+  const [hexSelection, setHexSelection] = useState<{ start: number; end: number } | null>(
+    null,
+  );
+  const [transformScope, setTransformScope] = useState<TransformScopeMode>("full");
 
   const stringOptions = useMemo(
     () => ({
@@ -51,12 +56,46 @@ export function App() {
   const { strings, scanning, truncated, scanProgress, usedWorker } =
     useExtractedStrings(data, stringOptions);
 
+  const transformRange = useMemo(() => {
+    if (transformScope === "selection" && hexSelection) return hexSelection;
+    return null;
+  }, [transformScope, hexSelection]);
+
+  const transformWorkData = useMemo(() => {
+    if (!data) return null;
+    if (transformRange) {
+      return data.subarray(transformRange.start, transformRange.end + 1);
+    }
+    return data;
+  }, [data, transformRange]);
+
   const {
     result: transformResult,
     scanning: transformScanning,
     progress: transformProgress,
     usedWorker: transformUsedWorker,
-  } = useTransformScan(data);
+  } = useTransformScan(data, transformRange);
+
+  const ingestBytes = useCallback(async (bytes: Uint8Array, name: string) => {
+    setLoadBusy(true);
+    try {
+      const loaded = await loadFromBytes(name, bytes);
+      setFileName(loaded.fileName);
+      setData(loaded.data);
+      setAnalysis(loaded.analysis);
+      setHashes(loaded.hashes);
+      setWarnedLarge(loaded.warnedLarge);
+      setTab("overview");
+      setJumpOffset(undefined);
+      setHexFocus(null);
+      setHexSelection(null);
+      setTransformScope("full");
+      setDisasmSlice(null);
+      setDisasmJumpOffset(undefined);
+    } finally {
+      setLoadBusy(false);
+    }
+  }, []);
 
   const hexRegions = useMemo(
     () => (analysis ? regionsFromAnalysis(analysis) : []),
@@ -225,6 +264,7 @@ export function App() {
                 regions={hexRegions}
                 analysis={analysis}
                 onJump={(o) => setJumpOffset(o)}
+                onSelectionRangeChange={setHexSelection}
               />
             )}
 
@@ -275,14 +315,21 @@ export function App() {
               </div>
             )}
 
-            {tab === "transform" && (
+            {tab === "transform" && transformWorkData && (
               <TransformPanel
                 data={data}
+                workData={transformWorkData}
+                scopeMode={transformScope}
+                onScopeModeChange={setTransformScope}
+                hexSelection={hexSelection}
                 result={transformResult}
                 scanning={transformScanning}
                 progress={transformProgress}
                 usedWorker={transformUsedWorker}
                 onJump={jumpTo}
+                onReanalyze={(bytes, suggested) =>
+                  void ingestBytes(bytes, `${suggested}.bin`)
+                }
               />
             )}
           </div>

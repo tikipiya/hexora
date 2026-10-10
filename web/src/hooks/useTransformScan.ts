@@ -11,6 +11,7 @@ import {
   carveFiles,
   scanCompression,
   scanEncodings,
+  shiftScanResults,
 } from "@hexora/shared";
 import type { TransformWorkerResponse } from "../workers/transform.worker";
 
@@ -24,13 +25,19 @@ export interface TransformScanResult {
   carved: CarvedArtifact[];
 }
 
-export function useTransformScan(data: Uint8Array | null) {
+export type TransformScanRange = { start: number; end: number } | null;
+
+export function useTransformScan(
+  data: Uint8Array | null,
+  range: TransformScanRange = null,
+) {
   const [result, setResult] = useState<TransformScanResult | null>(null);
   const [scanning, setScanning] = useState(false);
   const [progress, setProgress] = useState<{ phase: string; percent: number } | null>(
     null,
   );
   const [usedWorker, setUsedWorker] = useState(false);
+  const scanBase = range ? range.start : 0;
 
   useEffect(() => {
     if (!data) {
@@ -43,12 +50,18 @@ export function useTransformScan(data: Uint8Array | null) {
     setScanning(true);
     setResult(null);
 
+    const base = scanBase;
+    const slice =
+      range && range.end >= range.start
+        ? data.subarray(range.start, range.end + 1)
+        : data;
+
     const runLocal = () => {
-      const singleXor = analyzeSingleByteXor(data);
-      const repeatXor = analyzeRepeatingXor(data);
-      const encodings = scanEncodings(data);
-      const compression = scanCompression(data);
-      const carved = carveFiles(data, 500, (s, t) => {
+      const singleXor = analyzeSingleByteXor(slice);
+      const repeatXor = analyzeRepeatingXor(slice);
+      const encodings = scanEncodings(slice);
+      const compression = scanCompression(slice);
+      const carved = carveFiles(slice, 500, (s, t) => {
         if (!cancelled) {
           setProgress({
             phase: "carving",
@@ -56,18 +69,23 @@ export function useTransformScan(data: Uint8Array | null) {
           });
         }
       });
-      return { singleXor, repeatXor, encodings, compression, carved };
+      const shifted = shiftScanResults(base, encodings, compression, carved);
+      return {
+        singleXor,
+        repeatXor,
+        ...shifted,
+      };
     };
 
     const run = async () => {
-      if (data.length >= WORKER_THRESHOLD) {
+      if (slice.length >= WORKER_THRESHOLD) {
         setUsedWorker(true);
         const id = Date.now();
         const worker = new Worker(
           new URL("../workers/transform.worker.ts", import.meta.url),
           { type: "module" },
         );
-        const copy = data.slice().buffer;
+        const copy = slice.slice().buffer;
         await new Promise<void>((resolve, reject) => {
           worker.onmessage = (ev: MessageEvent<TransformWorkerResponse>) => {
             const msg = ev.data;
@@ -79,12 +97,16 @@ export function useTransformScan(data: Uint8Array | null) {
               });
             } else if (msg.type === "done") {
               if (!cancelled) {
+                const shifted = shiftScanResults(
+                  base,
+                  msg.encodings,
+                  msg.compression,
+                  msg.carved,
+                );
                 setResult({
                   singleXor: msg.singleXor,
                   repeatXor: msg.repeatXor,
-                  encodings: msg.encodings,
-                  compression: msg.compression,
-                  carved: msg.carved,
+                  ...shifted,
                 });
               }
               worker.terminate();
@@ -113,7 +135,7 @@ export function useTransformScan(data: Uint8Array | null) {
     return () => {
       cancelled = true;
     };
-  }, [data]);
+  }, [data, range?.start, range?.end, scanBase]);
 
-  return { result, scanning, progress, usedWorker };
+  return { result, scanning, progress, usedWorker, scanBase };
 }

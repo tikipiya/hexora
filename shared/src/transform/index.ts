@@ -13,3 +13,4 @@ export {
   type CarvedArtifact,
 } from "./carving.ts";
 export { shannonEntropy } from "./entropy.ts";
+export { shiftScanResults, shiftTransformOffsets } from "./offset.ts";
