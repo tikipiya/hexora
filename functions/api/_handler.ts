@@ -14,6 +14,11 @@ import {
   peFileToRva,
   peVaToRva,
   peRvaToVa,
+  analyzeSingleByteXor,
+  analyzeRepeatingXor,
+  scanEncodings,
+  scanCompression,
+  carveFiles,
 } from "../../shared/src/index.ts";
 
 type Env = { MAX_ANALYZE_BYTES?: string; ALLOWED_ORIGIN?: string };
@@ -158,4 +163,54 @@ export async function handleAddressPe(request: Request, env: Env): Promise<Respo
     return errorResponse(400, "Provide fileOffset, rva, or va", cors);
   }
   return jsonResponse({ ok: true, result, rvaToVa: body.rva !== undefined ? peRvaToVa(space, body.rva).toString() : undefined }, 200, cors);
+}
+
+export async function handleTransformScan(request: Request, env: Env): Promise<Response> {
+  const cors = allowedCorsOrigin(request, env);
+  if (request.method === "OPTIONS") return handleOptions(request, env);
+  if (request.method !== "POST") return errorResponse(405, "Method not allowed", cors);
+  let body: {
+    bytes?: string;
+    xor?: boolean;
+    encoding?: boolean;
+    compression?: boolean;
+    carving?: boolean;
+  };
+  try {
+    body = await request.json();
+  } catch {
+    return errorResponse(400, "Invalid JSON", cors);
+  }
+  if (!body.bytes) return errorResponse(400, "Missing bytes (base64)", cors);
+  const decoded = parseBase64Payload(body.bytes, maxAnalyzeBytes(env));
+  if (!decoded.ok) return errorResponse(decoded.status, decoded.error, cors);
+  const data = decoded.bytes;
+  const opt = {
+    xor: body.xor !== false,
+    encoding: body.encoding !== false,
+    compression: body.compression !== false,
+    carving: body.carving !== false,
+  };
+  const singleXor = opt.xor ? analyzeSingleByteXor(data) : [];
+  const repeatXor = opt.xor ? analyzeRepeatingXor(data) : [];
+  const encodings = opt.encoding
+    ? scanEncodings(data).map((e) => ({
+        ...e,
+        decodedBytes: undefined,
+      }))
+    : [];
+  const compression = opt.compression ? scanCompression(data) : [];
+  const carved = opt.carving ? carveFiles(data, 300) : [];
+  return jsonResponse(
+    {
+      ok: true,
+      singleXor,
+      repeatXor,
+      encodings,
+      compression,
+      carved,
+    },
+    200,
+    cors,
+  );
 }

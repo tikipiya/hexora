@@ -11,13 +11,15 @@ import { FileDropzone, FileMeta } from "./components/FileDropzone";
 import { HashPanel } from "./components/HashPanel";
 import { HexViewer } from "./components/HexViewer";
 import { StringsPanel } from "./components/StringsPanel";
+import { TransformPanel } from "./components/TransformPanel";
 import { useExtractedStrings } from "./hooks/useExtractedStrings";
+import { useTransformScan } from "./hooks/useTransformScan";
 import { analyzeBinary, type BinaryAnalysis } from "./lib/binaryAnalysis";
 import type { LoadedFile } from "./lib/fileLoad";
 import { regionsFromAnalysis } from "./lib/memoryMap";
 import { DEFAULT_STRING_OPTIONS } from "./lib/strings";
 
-type Tab = "overview" | "hex" | "strings" | "disasm" | "structure";
+type Tab = "overview" | "hex" | "strings" | "disasm" | "structure" | "transform";
 
 export function App() {
   const [fileName, setFileName] = useState<string | null>(null);
@@ -53,6 +55,13 @@ export function App() {
   const { strings, scanning, truncated, scanProgress, usedWorker } =
     useExtractedStrings(data, stringOptions);
 
+  const {
+    result: transformResult,
+    scanning: transformScanning,
+    progress: transformProgress,
+    usedWorker: transformUsedWorker,
+  } = useTransformScan(data);
+
   const hexRegions = useMemo(
     () => (analysis ? regionsFromAnalysis(analysis) : []),
     [analysis],
@@ -65,9 +74,13 @@ export function App() {
     return "Unknown";
   }, [analysis]);
 
-  const jumpTo = (offset: number) => {
+  const jumpTo = (offset: number, length?: number) => {
     setJumpOffset(offset);
-    setHexFocus(null);
+    if (length !== undefined) {
+      setHexFocus({ start: offset, end: offset + Math.max(0, length - 1) });
+    } else {
+      setHexFocus(null);
+    }
     setTab("hex");
   };
 
@@ -204,6 +217,7 @@ export function App() {
                   ["hex", "Hex"],
                   ["strings", "Strings"],
                   ["disasm", "Disasm"],
+                  ["transform", "Transform"],
                 ] as const
               ).map(([id, label]) => (
                 <button
@@ -273,6 +287,17 @@ export function App() {
 
             {tab === "disasm" && !disasmSlice && (
               <DisasmPanel arch={null} baseAddress={0} bytes={new Uint8Array()} label="" />
+            )}
+
+            {tab === "transform" && (
+              <TransformPanel
+                data={data}
+                result={transformResult}
+                scanning={transformScanning}
+                progress={transformProgress}
+                usedWorker={transformUsedWorker}
+                onJump={jumpTo}
+              />
             )}
           </div>
         )}
