@@ -65,7 +65,7 @@ export function TransformPanel({
   };
 
   const decompressAt = (offset: number, kind: CompressionKind) => {
-    const res = tryDecompress(data, offset, kind);
+    void tryDecompress(data, offset, kind).then((res) => {
     if (res.ok && res.data) {
       setPreview({
         title: `${kind} @ 0x${offset.toString(16)} (${res.data.length} B)`,
@@ -77,6 +77,7 @@ export function TransformPanel({
         bytes: new Uint8Array(),
       });
     }
+    });
   };
 
   const downloadPreview = () => {
@@ -255,7 +256,7 @@ export function TransformPanel({
             }}
           />
           <p className="text-caption text-fog-veil px-1">
-            gzip / zlib / deflate / zip（先頭エントリ）は fflate で展開。bzip2/xz/zstd は検出のみ。
+            gzip/zlib/deflate/zip（fflate）、bzip2（compressjs）、zstd（fzstd）、xz（wasm）をブラウザ内展開。
           </p>
         </div>
       )}

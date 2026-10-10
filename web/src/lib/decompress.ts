@@ -1,5 +1,9 @@
 import { gunzipSync, unzipSync, zlibSync, unzlibSync } from "fflate";
+import { decompress as zstdDecompress } from "fzstd";
+import { decompress as xzDecompress } from "xz-decompress";
 import type { CompressionKind } from "@hexora/shared";
+// compressjs is AMD/CJS; Vite prebundles default export
+import compressjs from "compressjs";
 
 export interface DecompressResult {
   ok: boolean;
@@ -8,12 +12,12 @@ export interface DecompressResult {
   ratio?: number;
 }
 
-export function tryDecompress(
+export async function tryDecompress(
   data: Uint8Array,
   offset: number,
   kind: CompressionKind,
   maxOut = 16 * 1024 * 1024,
-): DecompressResult {
+): Promise<DecompressResult> {
   const slice = data.subarray(offset);
   try {
     let out: Uint8Array;
@@ -34,8 +38,17 @@ export function tryDecompress(
         out = first;
         break;
       }
+      case "bzip2":
+        out = Uint8Array.from(compressjs.Bzip2.decompressFile(slice) as number[]);
+        break;
+      case "zstd":
+        out = zstdDecompress(slice);
+        break;
+      case "xz":
+        out = await xzDecompress(slice);
+        break;
       default:
-        return { ok: false, error: `${kind} はブラウザ内デコード未対応（カービングのみ）` };
+        return { ok: false, error: `${kind} はブラウザ内デコード未対応` };
     }
     if (out.length > maxOut) {
       return { ok: false, error: `展開結果が上限 (${maxOut} B) を超えました` };
