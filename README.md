@@ -19,6 +19,8 @@
 - **Structure** — PE リソース・リロック、ELF dynamic/rel、Mach-O セグメント
 - **Transform** — XOR（1-byte / 繰り返しキー候補）、Encoding（base64/hex/rot13 等）、Compression 署名検出 + gzip/zlib/deflate 展開、ファイルカービング（PNG/JPEG/PDF/ZIP/ELF/MZ 等）— 512 KiB 超は Worker
 - **Workers API** — 上記に加え `POST /api/transform/scan`（ヒューリスティックスキャン、base64・最大 4 MiB 既定）
+- **Diff** — 2 ファイルのバイト比較、差分ジャンプ
+- **共有 URL** — `#tab=hex&off=0x1000` ハッシュと「リンクをコピー」
 
 ## 開発
 

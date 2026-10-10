@@ -3,6 +3,8 @@ import type { CompressionKind, XorCandidate } from "@hexora/shared";
 import { tryDecodeAt, xorWithKey } from "@hexora/shared";
 import { tryDecompress } from "../lib/decompress";
 import type { TransformScanResult } from "../hooks/useTransformScan";
+import { fetchTransformScan } from "../lib/transformApi";
+import { maxAnalyzeBytes } from "@hexora/shared";
 
 export type TransformScopeMode = "full" | "selection";
 
@@ -41,6 +43,9 @@ export function TransformPanel({
     bytes: Uint8Array;
   } | null>(null);
   const [customKey, setCustomKey] = useState("");
+  const [apiStatus, setApiStatus] = useState<string | null>(null);
+  const [apiBusy, setApiBusy] = useState(false);
+  const apiMax = maxAnalyzeBytes();
 
   const applyXor = (c: XorCandidate) => {
     const decoded = xorWithKey(workData, c.key);
@@ -146,8 +151,39 @@ export function TransformPanel({
                 ? "Scan complete"
                 : "Waiting…"}
           </span>
+          <button
+            type="button"
+            disabled={apiBusy || workData.length > apiMax}
+            title={
+              workData.length > apiMax
+                ? `API は ${apiMax} B まで`
+                : "Workers /api/transform/scan と照合"
+            }
+            className="text-caption hairline-inset px-2 py-1 rounded text-blueprint-blue disabled:opacity-40"
+            onClick={() => {
+              setApiBusy(true);
+              setApiStatus(null);
+              void fetchTransformScan(workData)
+                .then((remote) => {
+                  const encL = result?.encodings.length ?? 0;
+                  const encR = remote.encodings.length;
+                  const carL = result?.carved.length ?? 0;
+                  const carR = remote.carved.length;
+                  setApiStatus(
+                    `API OK · enc ${encR}/${encL} · carved ${carR}/${carL} · xor ${remote.singleXor[0]?.keyHex ?? "—"}`,
+                  );
+                })
+                .catch((e) =>
+                  setApiStatus(e instanceof Error ? e.message : "API failed"),
+                )
+                .finally(() => setApiBusy(false));
+            }}
+          >
+            Verify API
+          </button>
         </div>
       </div>
+      {apiStatus && <p className="text-caption text-fog-veil px-1">{apiStatus}</p>}
 
       {sub === "xor" && (
         <div className="glass-card hairline-inset p-4 space-y-4">

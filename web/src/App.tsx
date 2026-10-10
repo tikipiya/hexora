@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Background } from "./components/Background";
 import { AddressConverter } from "./components/AddressConverter";
 import { AnalysisWarnings } from "./components/AnalysisWarnings";
@@ -19,8 +19,11 @@ import type { LoadedFile } from "./lib/fileLoad";
 import { regionsFromAnalysis } from "./lib/memoryMap";
 import { DEFAULT_STRING_OPTIONS } from "./lib/strings";
 import { loadFromBytes } from "./lib/loadBytes";
+import { DiffPanel } from "./components/DiffPanel";
+import { copyText } from "./lib/clipboard";
+import { parseUrlHash, writeUrlHash, type ShareableTab } from "./lib/urlState";
 
-type Tab = "overview" | "hex" | "strings" | "disasm" | "structure" | "transform";
+type Tab = ShareableTab;
 
 export function App() {
   const [fileName, setFileName] = useState<string | null>(null);
@@ -110,6 +113,11 @@ export function App() {
     return "Unknown";
   }, [analysis]);
 
+  useEffect(() => {
+    if (!data) return;
+    writeUrlHash({ tab, off: jumpOffset });
+  }, [tab, jumpOffset, data]);
+
   const jumpTo = (offset: number, length?: number) => {
     setJumpOffset(offset);
     if (length !== undefined) {
@@ -127,9 +135,7 @@ export function App() {
     setData(loaded.bytes);
     setWarnedLarge(loaded.warnedLarge);
     setHashes(loaded.hashes);
-    setTab("overview");
-    setJumpOffset(undefined);
-    setHexFocus(null);
+    const hash = parseUrlHash(window.location.hash);
 
     try {
       const a = analyzeBinary(loaded.buffer, "lenient");
@@ -137,6 +143,9 @@ export function App() {
 
       setDisasmSlice(null);
       setDisasmJumpOffset(undefined);
+      setTab(hash.tab ?? "overview");
+      setJumpOffset(hash.off);
+      setHexFocus(null);
     } finally {
       setLoadBusy(false);
     }
@@ -163,12 +172,26 @@ export function App() {
         <span className="font-aeonikpro text-body font-medium text-frost-glow">
           Hexora
         </span>
-        <a
-          href="https://github.com/tikipiya/hexora"
-          className="rounded-[var(--radius-buttons)] px-4 py-2 text-body-sm text-frost-glow hairline-inset hover:bg-[rgba(186,214,247,0.06)]"
-        >
-          GitHub
-        </a>
+        <div className="flex gap-2">
+          {data && (
+            <button
+              type="button"
+              className="rounded-[var(--radius-buttons)] px-4 py-2 text-body-sm text-frost-glow hairline-inset hover:bg-[rgba(186,214,247,0.06)]"
+              onClick={() => {
+                writeUrlHash({ tab, off: jumpOffset });
+                void copyText(window.location.href);
+              }}
+            >
+              リンクをコピー
+            </button>
+          )}
+          <a
+            href="https://github.com/tikipiya/hexora"
+            className="rounded-[var(--radius-buttons)] px-4 py-2 text-body-sm text-frost-glow hairline-inset hover:bg-[rgba(186,214,247,0.06)]"
+          >
+            GitHub
+          </a>
+        </div>
       </header>
 
       <main className="mx-auto max-w-[var(--page-max-width,1200px)] px-6 pb-24">
@@ -222,6 +245,7 @@ export function App() {
                   ["strings", "Strings"],
                   ["disasm", "Disasm"],
                   ["transform", "Transform"],
+                  ["diff", "Diff"],
                 ] as const
               ).map(([id, label]) => (
                 <button
@@ -314,6 +338,10 @@ export function App() {
                   />
                 )}
               </div>
+            )}
+
+            {tab === "diff" && fileName && (
+              <DiffPanel primary={data} primaryName={fileName} onJump={jumpTo} />
             )}
 
             {tab === "transform" && transformWorkData && (
