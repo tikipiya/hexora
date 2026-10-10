@@ -1,0 +1,6 @@
+name = "hexora"
+compatibility_date = "2024-09-23"
+pages_build_output_dir = "web/dist"
+
+[vars]
+MAX_DISASM_BYTES = "65536"

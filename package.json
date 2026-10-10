@@ -1,0 +1,19 @@
+{
+  "name": "hexora",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npm run dev --workspace=web",
+    "dev:api": "wrangler pages dev web/dist --compatibility-date=2024-09-23 --port=8788",
+    "build": "npm run build --workspace=web",
+    "preview": "npm run build && wrangler pages dev web/dist --compatibility-date=2024-09-23",
+    "deploy": "npm run build && wrangler pages deploy web/dist"
+  },
+  "workspaces": [
+    "web",
+    "shared"
+  ],
+  "devDependencies": {
+    "wrangler": "^4.14.0"
+  }
+}
