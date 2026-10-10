@@ -1,4 +1,4 @@
-import { gunzipSync, zlibSync, unzlibSync } from "fflate";
+import { gunzipSync, unzipSync, zlibSync, unzlibSync } from "fflate";
 import type { CompressionKind } from "@hexora/shared";
 
 export interface DecompressResult {
@@ -27,6 +27,13 @@ export function tryDecompress(
       case "deflate":
         out = zlibSync(slice);
         break;
+      case "zip": {
+        const files = unzipSync(slice);
+        const first = Object.values(files)[0];
+        if (!first) return { ok: false, error: "ZIP にファイルがありません" };
+        out = first;
+        break;
+      }
       default:
         return { ok: false, error: `${kind} はブラウザ内デコード未対応（カービングのみ）` };
     }

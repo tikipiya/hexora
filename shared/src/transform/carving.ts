@@ -99,6 +99,19 @@ export function estimateCarveLength(
   return Math.min(4096, data.length - at);
 }
 
+const SIGS_BY_FIRST_BYTE = buildFirstByteIndex();
+
+function buildFirstByteIndex(): Map<number, CarveSignature[]> {
+  const map = new Map<number, CarveSignature[]>();
+  for (const sig of CARVE_SIGNATURES) {
+    const fb = sig.magic[0];
+    const list = map.get(fb) ?? [];
+    list.push(sig);
+    map.set(fb, list);
+  }
+  return map;
+}
+
 export function carveFiles(
   data: Uint8Array,
   maxArtifacts = 500,
@@ -109,7 +122,9 @@ export function carveFiles(
 
   for (let i = 0; i < data.length && out.length < maxArtifacts; i++) {
     if (i % 65536 === 0) onProgress?.(i, data.length);
-    for (const sig of CARVE_SIGNATURES) {
+    const sigs = SIGS_BY_FIRST_BYTE.get(data[i]);
+    if (!sigs) continue;
+    for (const sig of sigs) {
       if (!matchMagic(data, i, sig)) continue;
       if (sig.validate && !sig.validate(data, i)) continue;
       const key = `${sig.id}:${i}`;

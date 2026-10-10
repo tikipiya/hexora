@@ -89,6 +89,24 @@ export function listDisasmTargets(
     }
   }
 
+  if (analysis.macho) {
+    const m = analysis.macho;
+    for (const s of m.segments) {
+      const off = Number(s.fileoff);
+      const size = Number(s.filesize);
+      if (size === 0 || off >= fileSize) continue;
+      targets.push({
+        id: `macho-${s.name}`,
+        label: `Segment ${s.name}`,
+        fileOffset: off,
+        maxSize: Math.min(size, fileSize - off),
+        baseAddress: Number(s.vmaddr),
+        arch,
+        executable: s.initprot.includes("X"),
+      });
+    }
+  }
+
   if (analysis.elf) {
     const elf = analysis.elf;
     const SHF_EXEC = 4n;

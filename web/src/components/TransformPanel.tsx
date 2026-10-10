@@ -219,7 +219,7 @@ export function TransformPanel({
             }}
           />
           <p className="text-caption text-fog-veil px-1">
-            gzip / zlib / deflate は fflate で展開。zip/bzip2/xz/zstd は検出のみ（カービングで抽出）。
+            gzip / zlib / deflate / zip（先頭エントリ）は fflate で展開。bzip2/xz/zstd は検出のみ。
           </p>
         </div>
       )}

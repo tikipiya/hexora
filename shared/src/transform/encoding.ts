@@ -28,6 +28,8 @@ export function scanEncodings(
   scanBase64Ascii(data, hits, maxHits);
   scanHexAscii(data, hits, maxHits);
   scanRot13Regions(data, hits, maxHits);
+  scanAscii85(data, hits, maxHits);
+  scanUuencode(data, hits, maxHits);
   return hits.sort((a, b) => a.offset - b.offset).slice(0, maxHits);
 }
 
@@ -121,6 +123,129 @@ function scanHexAscii(data: Uint8Array, hits: EncodingHit[], max: number): void 
   }
 }
 
+function scanAscii85(data: Uint8Array, hits: EncodingHit[], max: number): void {
+  for (let i = 0; i < data.length - 4 && hits.length < max; i++) {
+    if (data[i] !== 0x3c || data[i + 1] !== 0x7e) continue;
+    const end = findAscii85End(data, i + 2);
+    if (end < 0) continue;
+    const len = end - i + 2;
+    const body = new TextDecoder("ascii").decode(data.subarray(i + 2, end));
+    const decoded = decodeAscii85(body);
+    if (!decoded || decoded.length < 4) continue;
+    hits.push({
+      kind: "ascii85",
+      offset: i,
+      length: len,
+      confidence: 0.75,
+      decodedPreview: previewBytes(decoded),
+      decodedBytes: decoded,
+      heuristic: true,
+    });
+    i = end;
+  }
+}
+
+function findAscii85End(data: Uint8Array, from: number): number {
+  for (let i = from; i < data.length - 1; i++) {
+    if (data[i] === 0x7e && data[i + 1] === 0x3e) return i + 1;
+  }
+  return -1;
+}
+
+function decodeAscii85(input: string): Uint8Array | null {
+  const clean = input.replace(/\s+/g, "");
+  if (clean.length < 5) return null;
+  const out: number[] = [];
+  let i = 0;
+  while (i < clean.length) {
+    if (clean[i] === "z") {
+      out.push(0, 0, 0, 0);
+      i++;
+      continue;
+    }
+    let acc = 0;
+    let count = 0;
+    for (let j = 0; j < 5 && i + j < clean.length; j++) {
+      const c = clean.charCodeAt(i + j);
+      if (c < 0x21 || c > 0x75) return null;
+      acc = acc * 85 + (c - 0x21);
+      count++;
+    }
+    if (count < 5) {
+      for (let k = count; k < 5; k++) acc = acc * 85 + 0x54;
+    }
+    const b0 = (acc >>> 24) & 0xff;
+    const b1 = (acc >>> 16) & 0xff;
+    const b2 = (acc >>> 8) & 0xff;
+    const b3 = acc & 0xff;
+    const emit = count === 5 ? 4 : count - 1;
+    if (emit > 0) out.push(b0);
+    if (emit > 1) out.push(b1);
+    if (emit > 2) out.push(b2);
+    if (emit > 3) out.push(b3);
+    i += count;
+  }
+  return new Uint8Array(out);
+}
+
+function scanUuencode(data: Uint8Array, hits: EncodingHit[], max: number): void {
+  for (let i = 0; i < data.length - 10 && hits.length < max; i++) {
+    if (data[i] !== 0x62 || data[i + 1] !== 0x65 || data[i + 2] !== 0x67 || data[i + 3] !== 0x69)
+      continue;
+    const end = findBytesLine(data, "end", i);
+    if (end < 0) continue;
+    const chunk = data.subarray(i, end + 3);
+    const decoded = decodeUu(chunk);
+    if (!decoded || decoded.length < 4) continue;
+    hits.push({
+      kind: "uuencode",
+      offset: i,
+      length: chunk.length,
+      confidence: 0.7,
+      decodedPreview: previewBytes(decoded),
+      decodedBytes: decoded,
+      heuristic: true,
+    });
+    i = end;
+  }
+}
+
+function findBytesLine(data: Uint8Array, word: string, from: number): number {
+  const pat = new TextEncoder().encode(word);
+  for (let i = from; i < data.length - pat.length; i++) {
+    let ok = true;
+    for (let j = 0; j < pat.length; j++) {
+      if (data[i + j] !== pat[j]) {
+        ok = false;
+        break;
+      }
+    }
+    if (ok) return i;
+  }
+  return -1;
+}
+
+function decodeUu(data: Uint8Array): Uint8Array | null {
+  const text = new TextDecoder("ascii").decode(data);
+  const lines = text.split(/\r?\n/);
+  const out: number[] = [];
+  for (const line of lines) {
+    if (!line || line.startsWith("begin ") || line === "end") continue;
+    const len = (line.charCodeAt(0) - 0x20) & 0x3f;
+    if (len <= 0) continue;
+    for (let i = 1; i + 3 < line.length && out.length < len; i += 4) {
+      const c1 = line.charCodeAt(i) - 0x20;
+      const c2 = line.charCodeAt(i + 1) - 0x20;
+      const c3 = line.charCodeAt(i + 2) - 0x20;
+      const c4 = line.charCodeAt(i + 3) - 0x20;
+      out.push((c1 << 2) | (c2 >> 4));
+      if (out.length < len) out.push(((c2 & 0x0f) << 4) | (c3 >> 2));
+      if (out.length < len) out.push(((c3 & 0x03) << 6) | c4);
+    }
+  }
+  return out.length ? new Uint8Array(out) : null;
+}
+
 function scanRot13Regions(data: Uint8Array, hits: EncodingHit[], max: number): void {
   let start = -1;
   for (let i = 0; i < data.length && hits.length < max; i++) {
@@ -205,6 +330,11 @@ export function tryDecodeAt(
       return out;
     }
     if (kind === "rot13") return rot13(slice);
+    if (kind === "ascii85") {
+      const inner = text.replace(/^<~/, "").replace(/~>$/, "");
+      return decodeAscii85(inner);
+    }
+    if (kind === "uuencode") return decodeUu(slice);
     if (kind === "url") return new TextEncoder().encode(decodeURIComponent(text));
   } catch {
     return null;
