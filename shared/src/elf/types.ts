@@ -62,6 +62,7 @@ export interface ElfSymbol {
   shndx: number;
   sectionName?: string;
   fromDynsym: boolean;
+  versionName?: string;
 }
 
 export interface ElfDynamicEntry {
@@ -80,6 +81,17 @@ export interface ElfRelocation {
   sectionIndex: number;
 }
 
+export interface ElfVerneedEntry {
+  file: string;
+  versions: { name: string; hash: number; flags: number; index: number }[];
+}
+
+export interface ElfVersionInfo {
+  verneed: ElfVerneedEntry[];
+  versym: number[];
+  indexToName: Map<number, string>;
+}
+
 export interface ElfParseResult {
   ok: boolean;
   header: ElfHeader;
@@ -88,6 +100,7 @@ export interface ElfParseResult {
   symbols: ElfSymbol[];
   dynamic: ElfDynamicEntry[];
   relocations: ElfRelocation[];
+  versions: ElfVersionInfo | null;
   interpreter: string | null;
   gnuHash: { present: boolean; bucket?: number; symoffset?: number } | null;
   issues: ParseIssue[];

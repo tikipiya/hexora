@@ -95,6 +95,44 @@ export function BinaryStructureView({ analysis, onSelectOffset, onDisasmAt }: Pr
             }}
           />
         )}
+        {pe.debugEntries.length > 0 && (
+          <SectionTable
+            title="Debug directory"
+            columns={["Type", "Size", "RVA", "File"]}
+            rows={pe.debugEntries.map((d) => [
+              d.typeName,
+              String(d.sizeOfData),
+              `0x${d.rva.toString(16)}`,
+              d.fileOffset !== null ? `0x${d.fileOffset.toString(16)}` : "—",
+            ])}
+            onCellClick={(row) => {
+              const d = pe.debugEntries[row];
+              if (d?.fileOffset != null) onSelectOffset(d.fileOffset);
+            }}
+          />
+        )}
+        {pe.tls && (
+          <HeaderGrid
+            rows={[
+              ["TLS start RVA", `0x${pe.tls.startRva.toString(16)}`],
+              ["TLS end RVA", `0x${pe.tls.endRva.toString(16)}`],
+              ["Index RVA", `0x${pe.tls.indexRva.toString(16)}`],
+              ["Callbacks RVA", `0x${pe.tls.callbacksRva.toString(16)}`],
+              ["Zero fill", String(pe.tls.sizeOfZeroFill)],
+            ]}
+          />
+        )}
+        {pe.delayImports.length > 0 && (
+          <SectionTable
+            title="Delay load imports"
+            columns={["DLL", "Attributes", "Name RVA"]}
+            rows={pe.delayImports.map((d) => [
+              d.dll,
+              `0x${d.attributes.toString(16)}`,
+              `0x${d.rva.toString(16)}`,
+            ])}
+          />
+        )}
         {pe.relocBlocks.length > 0 && (
           <SectionTable
             title={`Base reloc blocks (${pe.relocBlocks.length})`}
@@ -173,6 +211,25 @@ export function BinaryStructureView({ analysis, onSelectOffset, onDisasmAt }: Pr
             if (!s.isNobits) onDisasmAt?.(Number(s.offset));
           }}
         />
+        {elf.versions && elf.versions.verneed.length > 0 && (
+          <div className="space-y-2">
+            <h4 className="text-moon-mist text-body-sm font-medium">GNU versions</h4>
+            <ul className="text-caption font-dotdigital space-y-2">
+              {elf.versions.verneed.map((vn, i) => (
+                <li key={i}>
+                  <span className="text-frost-glow">{vn.file || "(file)"}</span>
+                  <ul className="pl-4 text-moon-mist">
+                    {vn.versions.map((v) => (
+                      <li key={v.index}>
+                        {v.name} <span className="text-fog-veil">idx {v.index}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
         {elf.dynamic.length > 0 && (
           <SectionTable
             title={`Dynamic (${elf.dynamic.length})`}
@@ -198,13 +255,14 @@ export function BinaryStructureView({ analysis, onSelectOffset, onDisasmAt }: Pr
         {elf.symbols.length > 0 && (
           <SectionTable
             title={`Symbols (${elf.symbols.length})`}
-            columns={["Name", "Value", "Size", "Bind", "Type", "Sec"]}
+            columns={["Name", "Value", "Size", "Bind", "Type", "Ver", "Sec"]}
             rows={elf.symbols.slice(0, 300).map((s) => [
               s.name,
               `0x${s.value.toString(16)}`,
               String(s.size),
               s.bind,
               s.type,
+              s.versionName ?? "",
               s.sectionName ?? String(s.shndx),
             ])}
           />

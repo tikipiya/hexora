@@ -12,6 +12,7 @@ import type {
 } from "./types.ts";
 import { DATA_DIR_NAMES } from "./types.ts";
 import { peRvaToFile, buildPeAddressSpace } from "./address.ts";
+import { parsePeDebug, parsePeDelayImports, parsePeTls } from "./directories.ts";
 import { parsePeRelocBlocks } from "./relocs.ts";
 import { parsePeResources } from "./resources.ts";
 
@@ -200,6 +201,9 @@ export function parsePe(
   const exports = parseExports(r, space, dataDirectories[0], push);
   const resources = parsePeResources(r, space, dataDirectories[2]);
   const relocBlocks = parsePeRelocBlocks(r, space, dataDirectories[5]);
+  const debugEntries = parsePeDebug(r, space, dataDirectories[6]);
+  const tls = parsePeTls(r, space, dataDirectories[9], isPe32Plus);
+  const delayImports = parsePeDelayImports(r, space, dataDirectories[13], isPe32Plus);
 
   return {
     ok: !issues.some((i) => i.severity === "error"),
@@ -220,6 +224,9 @@ export function parsePe(
     exports,
     resources,
     relocBlocks,
+    debugEntries,
+    tls,
+    delayImports,
     issues,
   };
 }

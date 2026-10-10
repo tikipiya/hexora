@@ -14,6 +14,7 @@ export * from "./binary/errors.ts";
 export { BinaryReader, safeAdd } from "./binary/reader.ts";
 export { detectBinaryKind } from "./binary/format.ts";
 export { jsonSafe, hexAddr } from "./binary/serialize.ts";
+export { compareBinary, type DiffRegion, type DiffSummary } from "./binary/diff.ts";
 
 export { parseElf } from "./elf/parse.ts";
 export type { ElfParseResult } from "./elf/types.ts";

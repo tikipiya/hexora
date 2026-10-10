@@ -2,6 +2,11 @@
 export function jsonSafe(value: unknown): unknown {
   if (typeof value === "bigint") return value.toString();
   if (Array.isArray(value)) return value.map(jsonSafe);
+  if (value instanceof Map) {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of value) out[String(k)] = jsonSafe(v);
+    return out;
+  }
   if (value && typeof value === "object") {
     const out: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value)) {

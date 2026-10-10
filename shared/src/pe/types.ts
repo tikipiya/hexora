@@ -66,6 +66,30 @@ export interface PeRelocBlock {
   fileOffset: number;
 }
 
+export interface PeDebugEntry {
+  type: number;
+  typeName: string;
+  sizeOfData: number;
+  rva: number;
+  fileOffset: number | null;
+  timeDateStamp: number;
+}
+
+export interface PeTlsInfo {
+  startRva: number;
+  endRva: number;
+  indexRva: number;
+  callbacksRva: number;
+  sizeOfZeroFill: number;
+  characteristics: number;
+}
+
+export interface PeDelayImportDll {
+  dll: string;
+  attributes: number;
+  rva: number;
+}
+
 export interface PeParseResult {
   ok: boolean;
   dos: DosHeader;
@@ -85,6 +109,9 @@ export interface PeParseResult {
   exports: PeExportEntry[];
   resources: PeResourceEntry[];
   relocBlocks: PeRelocBlock[];
+  debugEntries: PeDebugEntry[];
+  tls: PeTlsInfo | null;
+  delayImports: PeDelayImportDll[];
   issues: ParseIssue[];
 }
 

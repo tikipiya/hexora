@@ -10,6 +10,7 @@ import type {
   ElfSectionHeader,
   ElfSymbol,
 } from "./types.ts";
+import { parseElfVersions, symbolVersionName } from "./version.ts";
 
 const E_TYPE: Record<number, string> = {
   0: "NONE",
@@ -250,6 +251,12 @@ export function parseElf(
     for (const sh of sectionHeaders) sh.name = `section_${sh.index}`;
   }
 
+  const dynstr = sectionHeaders.find((s) => s.name === ".dynstr");
+  const versions =
+    dynstr && dynstr.size > 0n
+      ? parseElfVersions(r, sectionHeaders, Number(dynstr.offset), klass)
+      : null;
+
   const symbols: ElfSymbol[] = [];
   const parseSymtab = (sh: ElfSectionHeader, dynsym: boolean) => {
     const strSh = sectionHeaders[sh.link];
@@ -269,7 +276,9 @@ export function parseElf(
         sym.shndx > 0 && sym.shndx < sectionHeaders.length
           ? sectionHeaders[sym.shndx]?.name
           : undefined;
-      symbols.push({ ...sym, sectionName: sec });
+      const versionName =
+        dynsym && versions ? symbolVersionName(versions, i) : undefined;
+      symbols.push({ ...sym, sectionName: sec, versionName });
     }
   };
 
@@ -326,11 +335,6 @@ export function parseElf(
     ? { present: true, bucket: Number(gnuHashSh.size), symoffset: Number(gnuHashSh.offset) }
     : { present: false };
 
-  const versymSh = sectionHeaders.find((s) => s.type === 0x6ffffffe);
-  if (versymSh) {
-    push({ severity: "warning", code: "versym_present", message: "SHT_GNU_VERNEED/VERSYM present (not fully decoded)", heuristic: true });
-  }
-
   return {
     ok: !issues.some((i) => i.severity === "error"),
     header,
@@ -339,6 +343,7 @@ export function parseElf(
     symbols,
     dynamic,
     relocations,
+    versions,
     interpreter,
     gnuHash,
     issues,
