@@ -54,7 +54,9 @@ export function DisasmPanel({ arch, baseAddress, bytes, label }: Props) {
     <div className="glass-card hairline-inset p-4 flex flex-col max-h-[420px]">
       <div className="flex items-center justify-between gap-2 mb-2">
         <h3 className="font-aeonikpro text-heading-sm text-ice-highlight">Disasm</h3>
-        <span className="text-caption text-fog-veil truncate">{label}</span>
+        <span className="text-caption text-fog-veil truncate">
+          {label} · Capstone WASM
+        </span>
       </div>
       {loading && <p className="text-fog-veil text-caption">デコード中…</p>}
       {error && <p className="text-ember-glow text-caption">{error}</p>}

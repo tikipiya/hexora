@@ -1,4 +1,4 @@
-export type Arch = "x86" | "x64";
+export type Arch = "x86" | "x64" | "arm64";
 
 export interface DisasmRequest {
   arch: Arch;

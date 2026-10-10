@@ -10,6 +10,13 @@ export default defineConfig({
       "@hexora/shared": path.resolve(__dirname, "../shared/src/index.ts"),
     },
   },
+  assetsInclude: ["**/*.wasm"],
+  worker: {
+    format: "es",
+  },
+  optimizeDeps: {
+    include: ["compressjs", "fzstd", "xz-decompress"],
+  },
   server: {
     proxy: {
       "/api": {

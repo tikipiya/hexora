@@ -19,13 +19,21 @@ export function archFromAnalysis(analysis: BinaryAnalysis): Arch | null {
     const m = analysis.pe.coff.machine;
     if (m === 0x8664) return "x64";
     if (m === 0x014c) return "x86";
+    if (m === 0xaa64) return "arm64";
     return null;
   }
   if (analysis.elf) {
     const m = analysis.elf.header.machine;
     if (m === 0x3e) return "x64";
     if (m === 0x03) return "x86";
+    if (m === 0xb7) return "arm64";
     return null;
+  }
+  if (analysis.macho) {
+    const n = analysis.macho.cpuName;
+    if (n.includes("ARM64")) return "arm64";
+    if (n.includes("x86_64")) return "x64";
+    if (n === "x86") return "x86";
   }
   return null;
 }

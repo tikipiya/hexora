@@ -15,9 +15,9 @@
 - **ファイル読み込み** — ストリーム読み込み・読み込み中ハッシュ・進捗・キャンセル
 - **Hex** — 仮想スクロール・Inspector（整数/浮動小数/ポインタ追跡）・構造体配列ビュー
 - **Strings** — 1 MiB 超は **Web Worker**、進捗付きスキャン、マルチエンコーディング
-- **Disasm** — x86/x64、セクション／オフセット選択（4 KiB 以下はブラウザ、それ以上は `POST /api/disasm`）
+- **Disasm** — **Capstone WASM**（x86 / x64 / **ARM64**）、セクション／オフセット選択（大きいバッファは Worker）
 - **Structure** — PE リソース・リロック、ELF dynamic/rel、Mach-O セグメント
-- **Transform** — XOR（1-byte / 繰り返しキー候補）、Encoding（base64/hex/rot13 等）、Compression 署名検出 + gzip/zlib/deflate 展開、ファイルカービング（PNG/JPEG/PDF/ZIP/ELF/MZ 等）— 512 KiB 超は Worker
+- **Transform** — XOR、Encoding、Compression（gzip/zlib/zip/**bzip2**/**zstd**/**xz** 展開）、カービング — 512 KiB 超は Worker
 - **Workers API** — 上記に加え `POST /api/transform/scan`（ヒューリスティックスキャン、base64・最大 4 MiB 既定）
 - **Diff** — 2 ファイルのバイト比較、差分ジャンプ
 - **共有 URL** — `#tab=hex&off=0x1000` ハッシュと「リンクをコピー」

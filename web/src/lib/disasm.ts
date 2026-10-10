@@ -1,29 +1,31 @@
 import type { Arch, DisasmResponse } from "@hexora/shared";
-import { disassembleBytes } from "@hexora/shared";
+import { DISASM_DEFAULT_MAX_INSTRUCTIONS } from "@hexora/shared";
+import { disassembleWithCapstone } from "./capstoneDisasm";
 
-/** 小さなバッファはブラウザ内、大きいものは Worker API */
-const CLIENT_MAX = 4096;
-
+/** Capstone WASM（x86 / x64 / ARM64） */
 export async function disassemble(
   arch: Arch,
   address: number,
   bytes: Uint8Array,
+  maxInstructions = DISASM_DEFAULT_MAX_INSTRUCTIONS,
 ): Promise<DisasmResponse> {
-  if (bytes.length <= CLIENT_MAX) {
-    return disassembleBytes(arch, address, bytes);
+  if (arch !== "arm64" && bytes.length > 256 * 1024) {
+    return disassembleRemote(arch, address, bytes, maxInstructions);
   }
-  return disassembleRemote(arch, address, bytes);
+  return disassembleWithCapstone(arch, address, bytes, maxInstructions);
 }
 
 async function disassembleRemote(
   arch: Arch,
   address: number,
   bytes: Uint8Array,
+  maxInstructions: number,
 ): Promise<DisasmResponse> {
   const body = {
     arch,
     address,
     bytes: uint8ToBase64(bytes),
+    maxInstructions,
   };
   const res = await fetch("/api/disasm", {
     method: "POST",
