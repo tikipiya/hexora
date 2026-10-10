@@ -8,6 +8,35 @@ import type {
   PeTlsInfo,
 } from "./types.ts";
 
+function parseCodeview(
+  r: BinaryReader,
+  offset: number,
+  size: number,
+): { kind: PeDebugEntry["codeviewKind"]; pdbPath: string | null } {
+  if (offset + 4 > r.length) return { kind: "unknown", pdbPath: null };
+  const sig =
+    String.fromCharCode(r.readU8(offset), r.readU8(offset + 1), r.readU8(offset + 2), r.readU8(offset + 3));
+  if (sig === "RSDS" && offset + 24 <= r.length) {
+    const pathOff = offset + 24;
+    const end = Math.min(offset + size, r.length);
+    let pdb = "";
+    for (let i = pathOff; i < end && r.readU8(i) !== 0; i++) {
+      pdb += String.fromCharCode(r.readU8(i));
+    }
+    return { kind: "RSDS", pdbPath: pdb || null };
+  }
+  if (sig === "NB10" && offset + 16 <= r.length) {
+    const pathOff = offset + 16;
+    const end = Math.min(offset + size, r.length);
+    let pdb = "";
+    for (let i = pathOff; i < end && r.readU8(i) !== 0; i++) {
+      pdb += String.fromCharCode(r.readU8(i));
+    }
+    return { kind: "NB10", pdbPath: pdb || null };
+  }
+  return { kind: "unknown", pdbPath: null };
+}
+
 const DEBUG_TYPES: Record<number, string> = {
   0: "UNKNOWN",
   1: "COFF",
@@ -47,14 +76,20 @@ export function parsePeDebug(
     const ptrRaw = r.readU32(off + 24);
     const fileOff = ptrRaw > 0 ? ptrRaw : peRvaToFile(space, rva).fileOffset;
     if (type === 0 && sizeOfData === 0 && rva === 0) break;
-    out.push({
+    const entry: PeDebugEntry = {
       type,
       typeName: DEBUG_TYPES[type] ?? `TYPE_${type}`,
       sizeOfData,
       rva,
       fileOffset: fileOff ?? null,
       timeDateStamp,
-    });
+    };
+    if (type === 2 && fileOff != null && fileOff + 4 <= r.length) {
+      const cv = parseCodeview(r, fileOff, sizeOfData);
+      entry.pdbPath = cv.pdbPath;
+      entry.codeviewKind = cv.kind;
+    }
+    out.push(entry);
     off += entSize;
   }
   return out;

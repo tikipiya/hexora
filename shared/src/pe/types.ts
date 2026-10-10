@@ -73,6 +73,15 @@ export interface PeDebugEntry {
   rva: number;
   fileOffset: number | null;
   timeDateStamp: number;
+  pdbPath?: string | null;
+  codeviewKind?: "RSDS" | "NB10" | "unknown" | null;
+}
+
+export interface PeResourceNode {
+  id: string;
+  label: string;
+  children: PeResourceNode[];
+  leaf?: PeResourceEntry;
 }
 
 export interface PeTlsInfo {
@@ -108,6 +117,7 @@ export interface PeParseResult {
   imports: PeImportEntry[];
   exports: PeExportEntry[];
   resources: PeResourceEntry[];
+  resourceTree: PeResourceNode[];
   relocBlocks: PeRelocBlock[];
   debugEntries: PeDebugEntry[];
   tls: PeTlsInfo | null;

@@ -1,7 +1,11 @@
 import type { BinaryReader } from "../binary/reader.ts";
 import type { PeAddressSpace } from "./address.ts";
 import { peRvaToFile } from "./address.ts";
-import type { DataDirectoryEntry, PeResourceEntry } from "./types.ts";
+import type {
+  DataDirectoryEntry,
+  PeResourceEntry,
+  PeResourceNode,
+} from "./types.ts";
 
 const RT: Record<number, string> = {
   1: "CURSOR",
@@ -19,6 +23,45 @@ const RT: Record<number, string> = {
   16: "VERSION",
   24: "MANIFEST",
 };
+
+export function buildPeResourceTree(entries: PeResourceEntry[]): PeResourceNode[] {
+  const byType = new Map<number, PeResourceEntry[]>();
+  for (const e of entries) {
+    const list = byType.get(e.typeId) ?? [];
+    list.push(e);
+    byType.set(e.typeId, list);
+  }
+  const roots: PeResourceNode[] = [];
+  for (const [typeId, list] of byType) {
+    const typeName = list[0]?.typeName ?? `RT_${typeId}`;
+    const byName = new Map<number, PeResourceEntry[]>();
+    for (const e of list) {
+      const n = byName.get(e.nameId) ?? [];
+      n.push(e);
+      byName.set(e.nameId, n);
+    }
+    const typeNode: PeResourceNode = {
+      id: `t-${typeId}`,
+      label: typeName,
+      children: [],
+    };
+    for (const [nameId, langs] of byName) {
+      const nameNode: PeResourceNode = {
+        id: `t-${typeId}-n-${nameId}`,
+        label: `id ${nameId}`,
+        children: langs.map((leaf) => ({
+          id: `t-${typeId}-n-${nameId}-l-${leaf.langId}`,
+          label: `lang ${leaf.langId} · ${leaf.size} B`,
+          children: [],
+          leaf,
+        })),
+      };
+      typeNode.children.push(nameNode);
+    }
+    roots.push(typeNode);
+  }
+  return roots;
+}
 
 export function parsePeResources(
   r: BinaryReader,

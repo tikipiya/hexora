@@ -1,4 +1,5 @@
 import type { BinaryAnalysis } from "../lib/binaryAnalysis";
+import { ResourceTreeView } from "./ResourceTreeView";
 
 interface Props {
   analysis: BinaryAnalysis;
@@ -78,9 +79,20 @@ export function BinaryStructureView({ analysis, onSelectOffset, onDisasmAt }: Pr
             </ul>
           </div>
         )}
+        {pe.resourceTree.length > 0 && (
+          <div>
+            <h4 className="text-moon-mist text-body-sm font-medium mb-2">
+              Resource tree ({pe.resources.length})
+            </h4>
+            <ResourceTreeView
+              nodes={pe.resourceTree}
+              onSelect={onSelectOffset}
+            />
+          </div>
+        )}
         {pe.resources.length > 0 && (
           <SectionTable
-            title={`Resources (${pe.resources.length})`}
+            title={`Resources flat (${pe.resources.length})`}
             columns={["Type", "Name", "Lang", "Size", "File"]}
             rows={pe.resources.slice(0, 150).map((res) => [
               res.typeName,
@@ -98,11 +110,11 @@ export function BinaryStructureView({ analysis, onSelectOffset, onDisasmAt }: Pr
         {pe.debugEntries.length > 0 && (
           <SectionTable
             title="Debug directory"
-            columns={["Type", "Size", "RVA", "File"]}
+            columns={["Type", "PDB / CV", "Size", "File"]}
             rows={pe.debugEntries.map((d) => [
               d.typeName,
+              d.pdbPath ?? d.codeviewKind ?? "—",
               String(d.sizeOfData),
-              `0x${d.rva.toString(16)}`,
               d.fileOffset !== null ? `0x${d.fileOffset.toString(16)}` : "—",
             ])}
             onCellClick={(row) => {
